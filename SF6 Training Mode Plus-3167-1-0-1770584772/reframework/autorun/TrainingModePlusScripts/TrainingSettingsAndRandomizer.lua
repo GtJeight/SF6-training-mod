@@ -724,15 +724,15 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
                     imgui.end_disabled()
                 end
 
+                if not config.enabled then
+                    imgui.end_disabled()
+                end
+
                 if
                     #PlayerController.drive_randomizer.custom_configs > 1 and
                         imgui.button(PlayerLabel .. " Delete Config " .. tostring(index))
                  then
                     remove_index = index
-                end
-
-                if not config.enabled then
-                    imgui.end_disabled()
                 end
                 end_drive_config_indent()
             end
