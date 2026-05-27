@@ -58,6 +58,18 @@ local DRIVE_RANDOMIZER_MODE_NAMES = {
     "Custom Weighted Configs"
 }
 
+local function begin_drive_config_indent()
+    if imgui.indent then
+        imgui.indent()
+    end
+end
+
+local function end_drive_config_indent()
+    if imgui.unindent then
+        imgui.unindent()
+    end
+end
+
 local function ensure_drive_randomizer_defaults(drive_randomizer)
     if drive_randomizer.enabled == nil then
         drive_randomizer.enabled = false
@@ -83,8 +95,13 @@ local function ensure_drive_randomizer_defaults(drive_randomizer)
         drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
     end
 
+    if drive_randomizer.custom_equal_frequency == nil then
+        drive_randomizer.custom_equal_frequency = false
+    end
+
     drive_randomizer.custom_configs = drive_randomizer.custom_configs or {
         {
+            enabled = true,
             value = 0,
             frequency = 1
         }
@@ -94,6 +111,7 @@ local function ensure_drive_randomizer_defaults(drive_randomizer)
         table.insert(
             drive_randomizer.custom_configs,
             {
+                enabled = true,
                 value = 0,
                 frequency = 1
             }
@@ -101,6 +119,9 @@ local function ensure_drive_randomizer_defaults(drive_randomizer)
     end
 
     for _, config in ipairs(drive_randomizer.custom_configs) do
+        if config.enabled == nil then
+            config.enabled = true
+        end
         config.value = math.max(-6, math.min(config.value or 0, 6))
         config.frequency = math.max(1, math.min(config.frequency or 1, 10))
     end
@@ -165,10 +186,12 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     PlayerController.drive_randomizer.upper_bound_points = 60000 -- drive randomizer upper bound
     PlayerController.drive_randomizer.custom_configs = {
         {
+            enabled = true,
             value = 0,
             frequency = 1
         }
     }
+    PlayerController.drive_randomizer.custom_equal_frequency = false
 
     -- drive points type, true == absolute, false == percentage
     PlayerController.drive_points_type = false
@@ -342,7 +365,13 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
     if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM then
         local total_frequency = 0
         for _, config in ipairs(DriveRandomizer.custom_configs) do
-            total_frequency = total_frequency + config.frequency
+            if config.enabled then
+                if DriveRandomizer.custom_equal_frequency then
+                    total_frequency = total_frequency + 1
+                else
+                    total_frequency = total_frequency + config.frequency
+                end
+            end
         end
 
         if total_frequency <= 0 then
@@ -354,10 +383,17 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
         local randomized_stocks = 0
 
         for _, config in ipairs(DriveRandomizer.custom_configs) do
-            accumulated_frequency = accumulated_frequency + config.frequency
-            if random_frequency <= accumulated_frequency then
-                randomized_stocks = config.value
-                break
+            if config.enabled then
+                if DriveRandomizer.custom_equal_frequency then
+                    accumulated_frequency = accumulated_frequency + 1
+                else
+                    accumulated_frequency = accumulated_frequency + config.frequency
+                end
+
+                if random_frequency <= accumulated_frequency then
+                    randomized_stocks = config.value
+                    break
+                end
             end
         end
 
@@ -648,11 +684,24 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
             imgui.separator()
             imgui.text(PlayerLabel .. " Custom Drive Configurations")
 
+            _, PlayerController.drive_randomizer.custom_equal_frequency =
+                imgui.checkbox(
+                PlayerLabel .. " Use Equal Frequency for Enabled Drive Configurations",
+                PlayerController.drive_randomizer.custom_equal_frequency
+            )
+
             local remove_index = nil
             for index, config in ipairs(PlayerController.drive_randomizer.custom_configs) do
                 imgui.separator()
                 imgui.text("Drive Configuration " .. tostring(index))
+                begin_drive_config_indent()
 
+                _, config.enabled =
+                    imgui.checkbox(PlayerLabel .. " Enable Config " .. tostring(index), config.enabled)
+
+                if not config.enabled then
+                    imgui.begin_disabled()
+                end
                 _, config.value =
                     imgui.slider_int(
                     PlayerLabel .. " Config " .. tostring(index) .. " Drive Value (-6 to 6)",
@@ -660,6 +709,10 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
                     -6,
                     6
                 )
+
+                if PlayerController.drive_randomizer.custom_equal_frequency then
+                    imgui.begin_disabled()
+                end
                 _, config.frequency =
                     imgui.slider_int(
                     PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)",
@@ -667,6 +720,9 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
                     1,
                     10
                 )
+                if PlayerController.drive_randomizer.custom_equal_frequency then
+                    imgui.end_disabled()
+                end
 
                 if
                     #PlayerController.drive_randomizer.custom_configs > 1 and
@@ -674,6 +730,11 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
                  then
                     remove_index = index
                 end
+
+                if not config.enabled then
+                    imgui.end_disabled()
+                end
+                end_drive_config_indent()
             end
 
             if remove_index ~= nil then
@@ -685,6 +746,7 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
                 table.insert(
                     PlayerController.drive_randomizer.custom_configs,
                     {
+                        enabled = true,
                         value = 0,
                         frequency = 1
                     }
