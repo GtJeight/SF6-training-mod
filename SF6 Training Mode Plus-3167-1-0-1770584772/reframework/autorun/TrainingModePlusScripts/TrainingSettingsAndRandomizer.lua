@@ -51,12 +51,10 @@ local PlayerParam = {
     }
 }
 
-local DRIVE_RANDOMIZER_MODE_DEFAULT = 1
-local DRIVE_RANDOMIZER_MODE_BOUNDS = 2
+local DRIVE_RANDOMIZER_MODE_RANGE = 1
 local DRIVE_RANDOMIZER_MODE_CUSTOM = 3
 local DRIVE_RANDOMIZER_MODE_NAMES = {
-    "Default Range",
-    "Bounded Range",
+    "Default / Bounded Range",
     "Custom Weighted Configs"
 }
 
@@ -72,20 +70,18 @@ local function ensure_drive_randomizer_defaults(drive_randomizer)
     drive_randomizer.lower_bound_points = drive_randomizer.lower_bound_points or 0
     drive_randomizer.upper_bound_points = drive_randomizer.upper_bound_points or 60000
 
-    if type(drive_randomizer.mode) ~= "number" then
-        if drive_randomizer.bounds_enabled then
-            drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_BOUNDS
-        else
-            drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_DEFAULT
-        end
+    if drive_randomizer.mode == 2 then
+        -- Compatibility with the previous three-option version: mode 2 was bounded range.
+        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
+    elseif type(drive_randomizer.mode) ~= "number" then
+        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
     end
     if
-        drive_randomizer.mode < DRIVE_RANDOMIZER_MODE_DEFAULT or
+        drive_randomizer.mode < DRIVE_RANDOMIZER_MODE_RANGE or
             drive_randomizer.mode > DRIVE_RANDOMIZER_MODE_CUSTOM
      then
-        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_DEFAULT
+        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
     end
-    drive_randomizer.bounds_enabled = drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS
 
     drive_randomizer.custom_configs = drive_randomizer.custom_configs or {
         {
@@ -162,7 +158,7 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     PlayerController.drive_randomizer = {}
     PlayerController.drive_randomizer.enabled = false -- drive randomizer enabled flag
     PlayerController.drive_randomizer.bounds_enabled = false -- drive randomizer bounds enabled flag
-    PlayerController.drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_DEFAULT
+    PlayerController.drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
     PlayerController.drive_randomizer.lower_bound_stock = 0 -- drive randomizer lower bound
     PlayerController.drive_randomizer.upper_bound_stock = 6 -- drive randomizer upper bound
     PlayerController.drive_randomizer.lower_bound_points = 0 -- drive randomizer lower bound
@@ -374,7 +370,7 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
         -- stock type
         local lower_bound = -6
         local upper_bound = 6
-        if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS then
+        if DriveRandomizer.bounds_enabled then
             lower_bound = DriveRandomizer.lower_bound_stock
             upper_bound = DriveRandomizer.upper_bound_stock
         end
@@ -384,7 +380,7 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
         -- point type
         local lower_bound = -60000
         local upper_bound = 60000
-        if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS then
+        if DriveRandomizer.bounds_enabled then
             lower_bound = DriveRandomizer.lower_bound_points
             upper_bound = DriveRandomizer.upper_bound_points
         end
@@ -557,86 +553,95 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
     if PlayerController.drive_randomizer.enabled then
         ensure_drive_randomizer_defaults(PlayerController.drive_randomizer)
 
-        _, PlayerController.drive_randomizer.mode =
+        local drive_randomizer_mode_index =
+            PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM and 2 or 1
+        _, drive_randomizer_mode_index =
             imgui.combo(
             PlayerLabel .. " Drive Randomization Mode",
-            PlayerController.drive_randomizer.mode,
+            drive_randomizer_mode_index,
             DRIVE_RANDOMIZER_MODE_NAMES
         )
+        PlayerController.drive_randomizer.mode =
+            drive_randomizer_mode_index == 2 and DRIVE_RANDOMIZER_MODE_CUSTOM or DRIVE_RANDOMIZER_MODE_RANGE
 
-        PlayerController.drive_randomizer.bounds_enabled =
-            PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS
+        if PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_RANGE then
+            _, PlayerController.drive_randomizer.bounds_enabled =
+                imgui.checkbox(
+                "Enable Bounds for " .. PlayerLabel .. " Drive Randomization",
+                PlayerController.drive_randomizer.bounds_enabled
+            )
 
-        if PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS then
-            -- show the bounds sliders based on type
+            if PlayerController.drive_randomizer.bounds_enabled then
+                -- show the bounds sliders based on type
 
-            if PlayerView.drive_type then
-                -- stock type
-                _, PlayerController.drive_randomizer.lower_bound_stock =
-                    imgui.drag_int(
-                    PlayerLabel .. " Drive Stock Randomization Lower Bound",
-                    PlayerController.drive_randomizer.lower_bound_stock,
-                    0.3,
-                    -6,
-                    PlayerController.drive_randomizer.upper_bound_stock
-                )
-                _, PlayerController.drive_randomizer.upper_bound_stock =
-                    imgui.drag_int(
-                    PlayerLabel .. " Drive Stock Randomization Upper Bound",
-                    PlayerController.drive_randomizer.upper_bound_stock,
-                    0.3,
-                    PlayerController.drive_randomizer.lower_bound_stock,
-                    6
-                )
-            else
-                -- point type
-                if PlayerController.drive_points_type then
-                    -- absolute type
-                    _, PlayerController.drive_randomizer.lower_bound_points =
+                if PlayerView.drive_type then
+                    -- stock type
+                    _, PlayerController.drive_randomizer.lower_bound_stock =
                         imgui.drag_int(
-                        PlayerLabel .. " Drive Points Randomization Lower Bound",
-                        PlayerController.drive_randomizer.lower_bound_points,
-                        1,
-                        -60000,
-                        PlayerController.drive_randomizer.upper_bound_points
+                        PlayerLabel .. " Drive Stock Randomization Lower Bound",
+                        PlayerController.drive_randomizer.lower_bound_stock,
+                        0.3,
+                        -6,
+                        PlayerController.drive_randomizer.upper_bound_stock
                     )
-                    _, PlayerController.drive_randomizer.upper_bound_points =
+                    _, PlayerController.drive_randomizer.upper_bound_stock =
                         imgui.drag_int(
-                        PlayerLabel .. " Drive Points Randomization Upper Bound",
-                        PlayerController.drive_randomizer.upper_bound_points,
-                        1,
-                        PlayerController.drive_randomizer.lower_bound_points,
-                        60000
+                        PlayerLabel .. " Drive Stock Randomization Upper Bound",
+                        PlayerController.drive_randomizer.upper_bound_stock,
+                        0.3,
+                        PlayerController.drive_randomizer.lower_bound_stock,
+                        6
                     )
                 else
-                    -- percentage type
-                    local points_increments_lb = 0
-                    local current_points_lb = PlayerController.drive_randomizer.lower_bound_points / 10000
+                    -- point type
+                    if PlayerController.drive_points_type then
+                        -- absolute type
+                        _, PlayerController.drive_randomizer.lower_bound_points =
+                            imgui.drag_int(
+                            PlayerLabel .. " Drive Points Randomization Lower Bound",
+                            PlayerController.drive_randomizer.lower_bound_points,
+                            1,
+                            -60000,
+                            PlayerController.drive_randomizer.upper_bound_points
+                        )
+                        _, PlayerController.drive_randomizer.upper_bound_points =
+                            imgui.drag_int(
+                            PlayerLabel .. " Drive Points Randomization Upper Bound",
+                            PlayerController.drive_randomizer.upper_bound_points,
+                            1,
+                            PlayerController.drive_randomizer.lower_bound_points,
+                            60000
+                        )
+                    else
+                        -- percentage type
+                        local points_increments_lb = 0
+                        local current_points_lb = PlayerController.drive_randomizer.lower_bound_points / 10000
 
-                    local points_increments_ub = 0
-                    local current_points_ub = PlayerController.drive_randomizer.upper_bound_points / 10000
+                        local points_increments_ub = 0
+                        local current_points_ub = PlayerController.drive_randomizer.upper_bound_points / 10000
 
-                    _, points_increments_lb =
-                        imgui.drag_float(
-                        PlayerLabel .. " Drive Points Randomization Lower Bound (stock increments of 10%)",
-                        current_points_lb,
-                        0.1,
-                        -6,
-                        current_points_ub,
-                        "%.1f"
-                    )
-                    PlayerController.drive_randomizer.lower_bound_points = math.floor(points_increments_lb * 10000)
+                        _, points_increments_lb =
+                            imgui.drag_float(
+                            PlayerLabel .. " Drive Points Randomization Lower Bound (stock increments of 10%)",
+                            current_points_lb,
+                            0.1,
+                            -6,
+                            current_points_ub,
+                            "%.1f"
+                        )
+                        PlayerController.drive_randomizer.lower_bound_points = math.floor(points_increments_lb * 10000)
 
-                    _, points_increments_ub =
-                        imgui.drag_float(
-                        PlayerLabel .. " Drive Points Randomization Upper Bound (stock increments of 10%)",
-                        current_points_ub,
-                        0.1,
-                        points_increments_lb,
-                        6,
-                        "%.1f"
-                    )
-                    PlayerController.drive_randomizer.upper_bound_points = math.floor(points_increments_ub * 10000)
+                        _, points_increments_ub =
+                            imgui.drag_float(
+                            PlayerLabel .. " Drive Points Randomization Upper Bound (stock increments of 10%)",
+                            current_points_ub,
+                            0.1,
+                            points_increments_lb,
+                            6,
+                            "%.1f"
+                        )
+                        PlayerController.drive_randomizer.upper_bound_points = math.floor(points_increments_ub * 10000)
+                    end
                 end
             end
         elseif PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM then
@@ -1416,13 +1421,9 @@ function PositionalParam:init(SelectMenuData)
     self.controller.randomizer.screen_upper_bound = module.data.PositionParametersData.default_screen_position.max
     self.controller.randomizer.screen_lower_bound_discrete = -6
     self.controller.randomizer.screen_upper_bound_discrete = 6
-    self.controller.randomizer.enabled_sideline_training = false
-    self.controller.randomizer.sideline_left_side = true
-    self.controller.randomizer.sideline_p1_left = true
 
     self.view.randomizer.screen_discrete_bounds_changed = false
     self.view.randomizer.screen_continuous_bounds_changed = false
-    self.view.randomizer.sideline_training_changed = false
 
     --[[
         HOOKS
@@ -1430,44 +1431,7 @@ function PositionalParam:init(SelectMenuData)
     local function on_pre(args)
         -- no pre logic needed
     end
-    local function apply_sideline_training()
-        local char_id1 = self.model.PlayerDatas[0].FighterID
-        local char_id2 = self.model.PlayerDatas[1].FighterID
-
-        local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
-        local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
-        local total_offset = offset1 + offset2
-        local point_blank_distance = module.data.PositionParametersData.default_relative_distance.min + total_offset
-        local manual_distance = point_blank_distance + total_offset
-        local screen_min = module.data.PositionParametersData.default_screen_position.min
-        local screen_max = module.data.PositionParametersData.default_screen_position.max
-
-        local left_pos
-        local right_pos
-        if self.controller.randomizer.sideline_left_side then
-            left_pos = screen_min
-            right_pos = screen_min + manual_distance
-        else
-            left_pos = screen_max - manual_distance
-            right_pos = screen_max
-        end
-
-        if self.controller.randomizer.sideline_p1_left then
-            self.model.PlayerDatas[0].ManualPosX = left_pos
-            self.model.PlayerDatas[1].ManualPosX = right_pos
-        else
-            self.model.PlayerDatas[0].ManualPosX = right_pos
-            self.model.PlayerDatas[1].ManualPosX = left_pos
-        end
-
-        self.model.StartLocation = 3
-    end
     local function on_post(retval)
-        if self.controller.randomizer.enabled_sideline_training then
-            apply_sideline_training()
-            return
-        end
-
         if not self.controller.relative_distance.enabled then
             -- if its disabled
             return
@@ -1566,7 +1530,6 @@ function PositionalParam:init(SelectMenuData)
     end
 
     self.update_positioning_func = on_post
-    self.apply_sideline_training = apply_sideline_training
 
     sdk.hook(
         sdk.find_type_definition("app.training.tf_SelectMenu.FuncData"):get_method("ChangeStartLocationType"),
@@ -1599,17 +1562,6 @@ function PositionalParam:update()
         self.controller.relative_distance.min,
         math.min(self.controller.relative_distance.relative_distance, self.controller.relative_distance.max)
     )
-
-    if self.view.randomizer.sideline_training_changed then
-        need_refresh = true
-        if self.controller.randomizer.enabled_sideline_training then
-            self.controller.randomizer.sideline_left_side = math.random(0, 1) == 0
-            self.controller.randomizer.sideline_p1_left = math.random(0, 1) == 0
-            self.model.StartLocation = 3
-        else
-            self.model.StartLocation = self.view.relative_distance.old_starting_position
-        end
-    end
 
     -- relative distance changed
     if self.view.relative_distance.relative_distance_enabled_changed then
@@ -1956,33 +1908,10 @@ function PositionalParam:update()
     return need_refresh
 end
 
-function PositionalParam:ensure_controller_defaults()
-    self.controller.randomizer = self.controller.randomizer or {}
-
-    if self.controller.randomizer.enabled_sideline_training == nil then
-        self.controller.randomizer.enabled_sideline_training = false
-    end
-
-    if self.controller.randomizer.sideline_left_side == nil then
-        self.controller.randomizer.sideline_left_side = true
-    end
-
-    if self.controller.randomizer.sideline_p1_left == nil then
-        self.controller.randomizer.sideline_p1_left = true
-    end
-end
-
 function PositionalParam:randomize()
     -- positional parameter randomization logic
 
     local need_refresh = false
-
-    if self.controller.randomizer.enabled_sideline_training then
-        need_refresh = true
-        self.controller.randomizer.sideline_left_side = math.random(0, 1) == 0
-        self.controller.randomizer.sideline_p1_left = math.random(0, 1) == 0
-        return need_refresh
-    end
 
     -- randomize relative distance
     if self.controller.randomizer.enabled_relative then
@@ -2103,15 +2032,6 @@ end
 
 function PositionalParam:draw_ui()
     -- positional parameter UI logic
-
-    self.view.randomizer.sideline_training_changed, self.controller.randomizer.enabled_sideline_training =
-        imgui.checkbox("Random Sideline Training", self.controller.randomizer.enabled_sideline_training)
-
-    imgui.separator()
-
-    if self.controller.randomizer.enabled_sideline_training then
-        imgui.begin_disabled()
-    end
 
     self.view.relative_distance.relative_distance_enabled_changed, self.controller.relative_distance.enabled =
         imgui.checkbox("Enable Start Position Adjustment", self.controller.relative_distance.enabled)
@@ -2453,9 +2373,6 @@ function PositionalParam:draw_ui()
         end
     end
 
-    if self.controller.randomizer.enabled_sideline_training then
-        imgui.end_disabled()
-    end
 end
 
 --[[
@@ -2493,7 +2410,6 @@ function module.init()
     end
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p1)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p2)
-    PositionalParam:ensure_controller_defaults()
 
     -- initialize refresh request flag
     module.request_refresh = false
