@@ -51,6 +51,87 @@ local PlayerParam = {
     }
 }
 
+local DRIVE_RANDOMIZER_MODE_DEFAULT = 1
+local DRIVE_RANDOMIZER_MODE_BOUNDS = 2
+local DRIVE_RANDOMIZER_MODE_CUSTOM = 3
+local DRIVE_RANDOMIZER_MODE_NAMES = {
+    "Default Range",
+    "Bounded Range",
+    "Custom Weighted Configs"
+}
+
+local function ensure_drive_randomizer_defaults(drive_randomizer)
+    if drive_randomizer.enabled == nil then
+        drive_randomizer.enabled = false
+    end
+    if drive_randomizer.bounds_enabled == nil then
+        drive_randomizer.bounds_enabled = false
+    end
+    drive_randomizer.lower_bound_stock = drive_randomizer.lower_bound_stock or 0
+    drive_randomizer.upper_bound_stock = drive_randomizer.upper_bound_stock or 6
+    drive_randomizer.lower_bound_points = drive_randomizer.lower_bound_points or 0
+    drive_randomizer.upper_bound_points = drive_randomizer.upper_bound_points or 60000
+
+    if type(drive_randomizer.mode) ~= "number" then
+        if drive_randomizer.bounds_enabled then
+            drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_BOUNDS
+        else
+            drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_DEFAULT
+        end
+    end
+    if
+        drive_randomizer.mode < DRIVE_RANDOMIZER_MODE_DEFAULT or
+            drive_randomizer.mode > DRIVE_RANDOMIZER_MODE_CUSTOM
+     then
+        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_DEFAULT
+    end
+    drive_randomizer.bounds_enabled = drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS
+
+    drive_randomizer.custom_configs = drive_randomizer.custom_configs or {
+        {
+            value = 0,
+            frequency = 1
+        }
+    }
+
+    if #drive_randomizer.custom_configs == 0 then
+        table.insert(
+            drive_randomizer.custom_configs,
+            {
+                value = 0,
+                frequency = 1
+            }
+        )
+    end
+
+    for _, config in ipairs(drive_randomizer.custom_configs) do
+        config.value = math.max(-6, math.min(config.value or 0, 6))
+        config.frequency = math.max(1, math.min(config.frequency or 1, 10))
+    end
+end
+
+local function ensure_player_drive_randomizer_defaults(PlayerController)
+    PlayerController.drive_randomizer = PlayerController.drive_randomizer or {}
+    ensure_drive_randomizer_defaults(PlayerController.drive_randomizer)
+end
+
+local function apply_randomized_drive_value(PlayerModel, randomized_value, points_mode)
+    if randomized_value < 0 then
+        randomized_value = -randomized_value
+        PlayerModel.Is_DG_Break = true
+    else
+        PlayerModel.Is_DG_Break = false
+    end
+
+    if points_mode then
+        PlayerModel.DG_Point = math.max(0, randomized_value)
+        PlayerModel.DG_Stock = math.floor((PlayerModel.DG_Point + 5000) / 10000)
+    else
+        PlayerModel.DG_Stock = math.max(0, randomized_value)
+        PlayerModel.DG_Point = PlayerModel.DG_Stock * 10000
+    end
+end
+
 function PlayerParam:init_player(PlayerIndex, PlayerParams)
     local PlayerView = self.view[PlayerIndex]
     local PlayerController = self.controller[PlayerIndex]
@@ -81,10 +162,17 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     PlayerController.drive_randomizer = {}
     PlayerController.drive_randomizer.enabled = false -- drive randomizer enabled flag
     PlayerController.drive_randomizer.bounds_enabled = false -- drive randomizer bounds enabled flag
+    PlayerController.drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_DEFAULT
     PlayerController.drive_randomizer.lower_bound_stock = 0 -- drive randomizer lower bound
     PlayerController.drive_randomizer.upper_bound_stock = 6 -- drive randomizer upper bound
     PlayerController.drive_randomizer.lower_bound_points = 0 -- drive randomizer lower bound
     PlayerController.drive_randomizer.upper_bound_points = 60000 -- drive randomizer upper bound
+    PlayerController.drive_randomizer.custom_configs = {
+        {
+            value = 0,
+            frequency = 1
+        }
+    }
 
     -- drive points type, true == absolute, false == percentage
     PlayerController.drive_points_type = false
@@ -251,42 +339,57 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
     local PlayerModel = self.model[PlayerIndex]
     local PlayerView = self.view[PlayerIndex]
     local PlayerController = self.controller[PlayerIndex]
+    local DriveRandomizer = PlayerController.drive_randomizer
+
+    ensure_drive_randomizer_defaults(DriveRandomizer)
+
+    if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM then
+        local total_frequency = 0
+        for _, config in ipairs(DriveRandomizer.custom_configs) do
+            total_frequency = total_frequency + config.frequency
+        end
+
+        if total_frequency <= 0 then
+            return
+        end
+
+        local random_frequency = math.random(1, total_frequency)
+        local accumulated_frequency = 0
+        local randomized_stocks = 0
+
+        for _, config in ipairs(DriveRandomizer.custom_configs) do
+            accumulated_frequency = accumulated_frequency + config.frequency
+            if random_frequency <= accumulated_frequency then
+                randomized_stocks = config.value
+                break
+            end
+        end
+
+        apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
+        return
+    end
 
     -- randomize drive logic
     if PlayerView.drive_type then
         -- stock type
         local lower_bound = -6
         local upper_bound = 6
-        if PlayerController.drive_randomizer.bounds_enabled then
-            lower_bound = PlayerController.drive_randomizer.lower_bound_stock
-            upper_bound = PlayerController.drive_randomizer.upper_bound_stock
+        if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS then
+            lower_bound = DriveRandomizer.lower_bound_stock
+            upper_bound = DriveRandomizer.upper_bound_stock
         end
         local randomized_stocks = math.random(lower_bound, upper_bound)
-        if randomized_stocks < 0 then
-            randomized_stocks = -randomized_stocks
-            PlayerModel.Is_DG_Break = true
-        else
-            PlayerModel.Is_DG_Break = false
-        end
-        PlayerModel.DG_Stock = math.max(0, randomized_stocks)
-        PlayerModel.DG_Point = PlayerModel.DG_Stock * 10000
+        apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
     else
         -- point type
         local lower_bound = -60000
         local upper_bound = 60000
-        if PlayerController.drive_randomizer.bounds_enabled then
-            lower_bound = PlayerController.drive_randomizer.lower_bound_points
-            upper_bound = PlayerController.drive_randomizer.upper_bound_points
+        if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS then
+            lower_bound = DriveRandomizer.lower_bound_points
+            upper_bound = DriveRandomizer.upper_bound_points
         end
         local randomized_points = math.random(lower_bound, upper_bound)
-        if randomized_points < 0 then
-            randomized_points = -randomized_points
-            PlayerModel.Is_DG_Break = true
-        else
-            PlayerModel.Is_DG_Break = false
-        end
-        PlayerModel.DG_Point = math.max(0, randomized_points)
-        PlayerModel.DG_Stock = math.floor((PlayerModel.DG_Point + 5000) / 10000)
+        apply_randomized_drive_value(PlayerModel, randomized_points, true)
     end
 end
 
@@ -450,18 +553,21 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
     -- randomizer checkbox
     _, PlayerController.drive_randomizer.enabled =
         imgui.checkbox("Toggle " .. PlayerLabel .. " Drive Randomization", PlayerController.drive_randomizer.enabled)
-    -- if randomizer bounds enable checkbox
 
     if PlayerController.drive_randomizer.enabled then
-        -- show the bounds enable checkbox
+        ensure_drive_randomizer_defaults(PlayerController.drive_randomizer)
 
-        _, PlayerController.drive_randomizer.bounds_enabled =
-            imgui.checkbox(
-            "Enable Bounds for " .. PlayerLabel .. " Drive Randomization",
-            PlayerController.drive_randomizer.bounds_enabled
+        _, PlayerController.drive_randomizer.mode =
+            imgui.combo(
+            PlayerLabel .. " Drive Randomization Mode",
+            PlayerController.drive_randomizer.mode,
+            DRIVE_RANDOMIZER_MODE_NAMES
         )
 
-        if PlayerController.drive_randomizer.bounds_enabled then
+        PlayerController.drive_randomizer.bounds_enabled =
+            PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS
+
+        if PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_BOUNDS then
             -- show the bounds sliders based on type
 
             if PlayerView.drive_type then
@@ -532,6 +638,52 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
                     )
                     PlayerController.drive_randomizer.upper_bound_points = math.floor(points_increments_ub * 10000)
                 end
+            end
+        elseif PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM then
+            imgui.separator()
+            imgui.text(PlayerLabel .. " Custom Drive Configurations")
+
+            local remove_index = nil
+            for index, config in ipairs(PlayerController.drive_randomizer.custom_configs) do
+                imgui.separator()
+                imgui.text("Drive Configuration " .. tostring(index))
+
+                _, config.value =
+                    imgui.slider_int(
+                    PlayerLabel .. " Config " .. tostring(index) .. " Drive Value (-6 to 6)",
+                    config.value,
+                    -6,
+                    6
+                )
+                _, config.frequency =
+                    imgui.slider_int(
+                    PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)",
+                    config.frequency,
+                    1,
+                    10
+                )
+
+                if
+                    #PlayerController.drive_randomizer.custom_configs > 1 and
+                        imgui.button(PlayerLabel .. " Delete Config " .. tostring(index))
+                 then
+                    remove_index = index
+                end
+            end
+
+            if remove_index ~= nil then
+                table.remove(PlayerController.drive_randomizer.custom_configs, remove_index)
+            end
+
+            imgui.separator()
+            if imgui.button(PlayerLabel .. " Add Drive Configuration") then
+                table.insert(
+                    PlayerController.drive_randomizer.custom_configs,
+                    {
+                        value = 0,
+                        frequency = 1
+                    }
+                )
             end
         end
     end
@@ -2339,6 +2491,8 @@ function module.init()
         PositionalParam.controller = config_file.PositionalParam or PositionalParam.controller
         module.hotkeys = config_file.Hotkeys or module.hotkeys
     end
+    ensure_player_drive_randomizer_defaults(PlayerParam.controller.p1)
+    ensure_player_drive_randomizer_defaults(PlayerParam.controller.p2)
     PositionalParam:ensure_controller_defaults()
 
     -- initialize refresh request flag
