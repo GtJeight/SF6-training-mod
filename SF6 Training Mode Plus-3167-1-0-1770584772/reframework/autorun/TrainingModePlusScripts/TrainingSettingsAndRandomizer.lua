@@ -1714,11 +1714,17 @@ function PositionalParam:init(SelectMenuData)
         -- no pre logic needed
     end
     local function on_post(retval)
-        if self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM then
+        if
+            self.controller.relative_distance.enabled and
+                self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM
+         then
             self:ensure_custom_position_defaults()
             local current_config = self:get_active_custom_position_config()
             if current_config then
                 self:apply_custom_position_config(current_config)
+                if self.view.relative_distance.old_starting_position == 3 then
+                    self.view.relative_distance.old_starting_position = 0
+                end
             end
             return
         end
@@ -1745,6 +1751,9 @@ function PositionalParam:init(SelectMenuData)
                 self.view.relative_distance.old_starting_position = self.model.StartLocation
             else
                 -- if starting position adjustment is disabled, we just use the old starting position
+                if self.view.relative_distance.old_starting_position == 3 then
+                    self.view.relative_distance.old_starting_position = 0
+                end
                 self.model.StartLocation = self.view.relative_distance.old_starting_position
             end
         end
@@ -1862,10 +1871,17 @@ function PositionalParam:update()
         need_refresh = true
         if self.controller.relative_distance.enabled then
             -- enable relative distance adjustments
-            self.view.relative_distance.old_starting_position = self.model.StartLocation
+            if self.model.StartLocation ~= 3 then
+                self.view.relative_distance.old_starting_position = self.model.StartLocation
+            elseif self.view.relative_distance.old_starting_position == 3 then
+                self.view.relative_distance.old_starting_position = 0
+            end
         else
             -- disable relative distance adjustments
             -- revert to old starting position
+            if self.view.relative_distance.old_starting_position == 3 then
+                self.view.relative_distance.old_starting_position = 0
+            end
             self.model.StartLocation = self.view.relative_distance.old_starting_position
         end
     end
@@ -2439,6 +2455,9 @@ function PositionalParam:draw_custom_position_ui()
             imgui.begin_disabled()
         end
 
+        if custom_position.override_start_position_enabled then
+            imgui.begin_disabled()
+        end
         _, config.start_position =
             imgui.drag_float(
             "Position Config " .. tostring(index) .. " Starting Position X",
@@ -2447,7 +2466,13 @@ function PositionalParam:draw_custom_position_ui()
             screen_min,
             screen_max
         )
+        if custom_position.override_start_position_enabled then
+            imgui.end_disabled()
+        end
 
+        if custom_position.override_relative_distance_enabled then
+            imgui.begin_disabled()
+        end
         _, config.relative_distance =
             imgui.drag_float(
             "Position Config " .. tostring(index) .. " Relative Distance",
@@ -2456,9 +2481,18 @@ function PositionalParam:draw_custom_position_ui()
             self.controller.relative_distance.min,
             self.controller.relative_distance.max
         )
+        if custom_position.override_relative_distance_enabled then
+            imgui.end_disabled()
+        end
 
+        if custom_position.override_side_enabled then
+            imgui.begin_disabled()
+        end
         _, config.side_index =
             imgui.combo("Position Config " .. tostring(index) .. " Player Side", config.side_index, CUSTOM_POSITION_SIDE_NAMES)
+        if custom_position.override_side_enabled then
+            imgui.end_disabled()
+        end
 
         if custom_position.equal_frequency then
             imgui.begin_disabled()
