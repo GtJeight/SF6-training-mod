@@ -155,7 +155,11 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
 
     -- copy the model
     self.model[PlayerIndex] = PlayerParams
-    PlayerParams.Is_DG_Point_Lock = true
+    PlayerView.original_drive_type = PlayerParams.DG_Type
+    PlayerView.original_drive_point_lock = PlayerParams.Is_DG_Point_Lock
+    if PlayerParams.DG_Type ~= 1 then
+        PlayerParams.Is_DG_Point_Lock = true
+    end
 
     --[[
         Health parameter initialization
@@ -264,6 +268,7 @@ function PlayerParam:update_player_parameters(PlayerIndex)
         if PlayerView.drive_type then
             -- stock type
             PlayerModel.DG_Type = 1
+            PlayerModel.Is_DG_Point_Lock = PlayerView.original_drive_point_lock or false
         else
             -- custom type
             PlayerModel.DG_Type = 3
@@ -397,7 +402,15 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
             end
         end
 
-        apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
+        if PlayerView.drive_type then
+            PlayerModel.DG_Type = 1
+            PlayerModel.Is_DG_Point_Lock = PlayerView.original_drive_point_lock or false
+            apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
+        else
+            PlayerModel.DG_Type = 3
+            PlayerModel.Is_DG_Point_Lock = true
+            apply_randomized_drive_value(PlayerModel, randomized_stocks * 10000, true)
+        end
         return
     end
 
@@ -1416,6 +1429,51 @@ local function clamp_position_value(value)
     )
 end
 
+local function clamp_discrete_position_value(value)
+    return math.max(-6, math.min(value or 0, 6))
+end
+
+local function discrete_position_to_absolute(discrete_value)
+    local min_pos = module.data.PositionParametersData.default_screen_position.min
+    local max_pos = module.data.PositionParametersData.default_screen_position.max
+    return min_pos + ((clamp_discrete_position_value(discrete_value) + 6) / 12) * (max_pos - min_pos)
+end
+
+local function absolute_position_to_discrete(position)
+    local min_pos = module.data.PositionParametersData.default_screen_position.min
+    local max_pos = module.data.PositionParametersData.default_screen_position.max
+    return clamp_discrete_position_value(math.floor(((clamp_position_value(position) - min_pos) / (max_pos - min_pos)) * 12 + 0.5) - 6)
+end
+
+local function clamp_relative_distance_preset_index(index)
+    local max_index = #module.data.PositionParametersData.preset_relative_distance_offsets.names
+    return math.max(1, math.min(index or 1, max_index))
+end
+
+local function relative_distance_preset_to_value(index, min_distance, max_distance)
+    if index ~= #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1 then
+        return min_distance + module.data.PositionParametersData.preset_relative_distance_offsets.values[index]
+    end
+
+    return max_distance
+end
+
+local function relative_distance_to_preset_index(distance, min_distance, max_distance)
+    local closest_index = 1
+    local closest_distance = math.abs(distance - relative_distance_preset_to_value(1, min_distance, max_distance))
+
+    for index = 2, #module.data.PositionParametersData.preset_relative_distance_offsets.names do
+        local candidate_distance = relative_distance_preset_to_value(index, min_distance, max_distance)
+        local distance_delta = math.abs(distance - candidate_distance)
+        if distance_delta < closest_distance then
+            closest_distance = distance_delta
+            closest_index = index
+        end
+    end
+
+    return closest_index
+end
+
 local function clamp_custom_position_side(side_index)
     if
         side_index ~= CUSTOM_POSITION_SIDE_RANDOM and side_index ~= CUSTOM_POSITION_SIDE_PLAYER_LEFT and
@@ -1446,6 +1504,10 @@ function PositionalParam:ensure_custom_position_defaults()
         custom_position.override_start_position_enabled = false
     end
     custom_position.override_start_position = clamp_position_value(custom_position.override_start_position or 0.0)
+    custom_position.override_discrete_start_position =
+        clamp_discrete_position_value(
+        custom_position.override_discrete_start_position or absolute_position_to_discrete(custom_position.override_start_position)
+    )
 
     if custom_position.override_relative_distance_enabled == nil then
         custom_position.override_relative_distance_enabled = false
@@ -1454,6 +1516,15 @@ function PositionalParam:ensure_custom_position_defaults()
         math.max(
         self.controller.relative_distance.min,
         math.min(custom_position.override_relative_distance or self.controller.relative_distance.min, self.controller.relative_distance.max)
+    )
+    custom_position.override_relative_distance_preset_index =
+        clamp_relative_distance_preset_index(
+        custom_position.override_relative_distance_preset_index or
+            relative_distance_to_preset_index(
+                custom_position.override_relative_distance,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
     )
 
     if custom_position.override_side_enabled == nil then
@@ -1464,12 +1535,20 @@ function PositionalParam:ensure_custom_position_defaults()
     if custom_position.equal_frequency == nil then
         custom_position.equal_frequency = false
     end
+    if custom_position.discrete_position_enabled == nil then
+        custom_position.discrete_position_enabled = true
+    end
+    if custom_position.discrete_distance_enabled == nil then
+        custom_position.discrete_distance_enabled = true
+    end
 
     custom_position.configs = custom_position.configs or {
         {
             enabled = true,
             start_position = 0.0,
+            discrete_start_position = 0,
             relative_distance = self.controller.relative_distance.min,
+            relative_distance_preset_index = 1,
             side_index = CUSTOM_POSITION_SIDE_RANDOM,
             frequency = 1
         }
@@ -1481,7 +1560,9 @@ function PositionalParam:ensure_custom_position_defaults()
             {
                 enabled = true,
                 start_position = 0.0,
+                discrete_start_position = 0,
                 relative_distance = self.controller.relative_distance.min,
+                relative_distance_preset_index = 1,
                 side_index = CUSTOM_POSITION_SIDE_RANDOM,
                 frequency = 1
             }
@@ -1493,10 +1574,21 @@ function PositionalParam:ensure_custom_position_defaults()
             config.enabled = true
         end
         config.start_position = clamp_position_value(config.start_position or 0.0)
+        config.discrete_start_position =
+            clamp_discrete_position_value(config.discrete_start_position or absolute_position_to_discrete(config.start_position))
         config.relative_distance =
             math.max(
             self.controller.relative_distance.min,
             math.min(config.relative_distance or self.controller.relative_distance.min, self.controller.relative_distance.max)
+        )
+        config.relative_distance_preset_index =
+            clamp_relative_distance_preset_index(
+            config.relative_distance_preset_index or
+                relative_distance_to_preset_index(
+                    config.relative_distance,
+                    self.controller.relative_distance.min,
+                    self.controller.relative_distance.max
+                )
         )
         config.side_index = clamp_custom_position_side(config.side_index)
         config.frequency = math.max(1, math.min(config.frequency or 1, 10))
@@ -1532,13 +1624,35 @@ function PositionalParam:apply_custom_position_config(config)
 
     local custom_position = self.controller.custom_position
     local start_position = config.start_position
+    if custom_position.discrete_position_enabled then
+        start_position = discrete_position_to_absolute(config.discrete_start_position)
+    end
     if custom_position.override_start_position_enabled then
         start_position = custom_position.override_start_position
+        if custom_position.discrete_position_enabled then
+            start_position = discrete_position_to_absolute(custom_position.override_discrete_start_position)
+        end
     end
 
     local relative_distance = config.relative_distance
+    if custom_position.discrete_distance_enabled then
+        relative_distance =
+            relative_distance_preset_to_value(
+            config.relative_distance_preset_index,
+            self.controller.relative_distance.min,
+            self.controller.relative_distance.max
+        )
+    end
     if custom_position.override_relative_distance_enabled then
         relative_distance = custom_position.override_relative_distance
+        if custom_position.discrete_distance_enabled then
+            relative_distance =
+                relative_distance_preset_to_value(
+                custom_position.override_relative_distance_preset_index,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+        end
     end
 
     local side_index = config.side_index
@@ -1691,16 +1805,22 @@ function PositionalParam:init(SelectMenuData)
     self.controller.custom_position = {
         override_start_position_enabled = false,
         override_start_position = 0.0,
+        override_discrete_start_position = 0,
         override_relative_distance_enabled = false,
         override_relative_distance = self.controller.relative_distance.min,
+        override_relative_distance_preset_index = 1,
         override_side_enabled = false,
         override_side_index = CUSTOM_POSITION_SIDE_RANDOM,
         equal_frequency = false,
+        discrete_position_enabled = true,
+        discrete_distance_enabled = true,
         configs = {
             {
                 enabled = true,
                 start_position = 0.0,
+                discrete_start_position = 0,
                 relative_distance = self.controller.relative_distance.min,
+                relative_distance_preset_index = 1,
                 side_index = CUSTOM_POSITION_SIDE_RANDOM,
                 frequency = 1
             }
@@ -2393,6 +2513,72 @@ function PositionalParam:draw_custom_position_ui()
     local screen_max = module.data.PositionParametersData.default_screen_position.max
 
     imgui.separator()
+    imgui.text("Custom Position Input Mode")
+    begin_position_config_indent()
+
+    local discrete_position_changed = false
+    discrete_position_changed, custom_position.discrete_position_enabled =
+        imgui.checkbox("Use Discrete Position Values", custom_position.discrete_position_enabled)
+    if discrete_position_changed then
+        if custom_position.discrete_position_enabled then
+            custom_position.override_discrete_start_position =
+                absolute_position_to_discrete(custom_position.override_start_position)
+        else
+            custom_position.override_start_position =
+                discrete_position_to_absolute(custom_position.override_discrete_start_position)
+        end
+
+        for _, config in ipairs(custom_position.configs) do
+            if custom_position.discrete_position_enabled then
+                config.discrete_start_position = absolute_position_to_discrete(config.start_position)
+            else
+                config.start_position = discrete_position_to_absolute(config.discrete_start_position)
+            end
+        end
+    end
+
+    local discrete_distance_changed = false
+    discrete_distance_changed, custom_position.discrete_distance_enabled =
+        imgui.checkbox("Use Preset Relative Distances", custom_position.discrete_distance_enabled)
+    if discrete_distance_changed then
+        if custom_position.discrete_distance_enabled then
+            custom_position.override_relative_distance_preset_index =
+                relative_distance_to_preset_index(
+                custom_position.override_relative_distance,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+        else
+            custom_position.override_relative_distance =
+                relative_distance_preset_to_value(
+                custom_position.override_relative_distance_preset_index,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+        end
+
+        for _, config in ipairs(custom_position.configs) do
+            if custom_position.discrete_distance_enabled then
+                config.relative_distance_preset_index =
+                    relative_distance_to_preset_index(
+                    config.relative_distance,
+                    self.controller.relative_distance.min,
+                    self.controller.relative_distance.max
+                )
+            else
+                config.relative_distance =
+                    relative_distance_preset_to_value(
+                    config.relative_distance_preset_index,
+                    self.controller.relative_distance.min,
+                    self.controller.relative_distance.max
+                )
+            end
+        end
+    end
+
+    end_position_config_indent()
+
+    imgui.separator()
     imgui.text("Custom Position Overrides")
     begin_position_config_indent()
 
@@ -2401,8 +2587,27 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_start_position_enabled then
         imgui.begin_disabled()
     end
-    _, custom_position.override_start_position =
-        imgui.drag_float("Override Starting Position X", custom_position.override_start_position, 1.0, screen_min, screen_max)
+    if custom_position.discrete_position_enabled then
+        _, custom_position.override_discrete_start_position =
+            imgui.slider_int(
+            "Override Starting Position Reference",
+            custom_position.override_discrete_start_position,
+            -6,
+            6
+        )
+        custom_position.override_start_position = discrete_position_to_absolute(custom_position.override_discrete_start_position)
+    else
+        _, custom_position.override_start_position =
+            imgui.drag_float(
+            "Override Starting Position X",
+            custom_position.override_start_position,
+            1.0,
+            screen_min,
+            screen_max
+        )
+        custom_position.override_discrete_start_position =
+            absolute_position_to_discrete(custom_position.override_start_position)
+    end
     if not custom_position.override_start_position_enabled then
         imgui.end_disabled()
     end
@@ -2412,14 +2617,36 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_relative_distance_enabled then
         imgui.begin_disabled()
     end
-    _, custom_position.override_relative_distance =
-        imgui.drag_float(
-        "Override Relative Distance Value",
-        custom_position.override_relative_distance,
-        1.0,
-        self.controller.relative_distance.min,
-        self.controller.relative_distance.max
-    )
+    if custom_position.discrete_distance_enabled then
+        _, custom_position.override_relative_distance_preset_index =
+            imgui.combo(
+            "Override Relative Distance Preset",
+            custom_position.override_relative_distance_preset_index,
+            module.data.PositionParametersData.preset_relative_distance_offsets.names
+        )
+        custom_position.override_relative_distance =
+            relative_distance_preset_to_value(
+            custom_position.override_relative_distance_preset_index,
+            self.controller.relative_distance.min,
+            self.controller.relative_distance.max
+        )
+        imgui.text("Current Override Relative Distance: " .. string.format("%.2f", custom_position.override_relative_distance))
+    else
+        _, custom_position.override_relative_distance =
+            imgui.drag_float(
+            "Override Relative Distance Value",
+            custom_position.override_relative_distance,
+            1.0,
+            self.controller.relative_distance.min,
+            self.controller.relative_distance.max
+        )
+        custom_position.override_relative_distance_preset_index =
+            relative_distance_to_preset_index(
+            custom_position.override_relative_distance,
+            self.controller.relative_distance.min,
+            self.controller.relative_distance.max
+        )
+    end
     if not custom_position.override_relative_distance_enabled then
         imgui.end_disabled()
     end
@@ -2458,14 +2685,26 @@ function PositionalParam:draw_custom_position_ui()
         if custom_position.override_start_position_enabled then
             imgui.begin_disabled()
         end
-        _, config.start_position =
-            imgui.drag_float(
-            "Position Config " .. tostring(index) .. " Starting Position X",
-            config.start_position,
-            1.0,
-            screen_min,
-            screen_max
-        )
+        if custom_position.discrete_position_enabled then
+            _, config.discrete_start_position =
+                imgui.slider_int(
+                "Position Config " .. tostring(index) .. " Starting Position Reference",
+                config.discrete_start_position,
+                -6,
+                6
+            )
+            config.start_position = discrete_position_to_absolute(config.discrete_start_position)
+        else
+            _, config.start_position =
+                imgui.drag_float(
+                "Position Config " .. tostring(index) .. " Starting Position X",
+                config.start_position,
+                1.0,
+                screen_min,
+                screen_max
+            )
+            config.discrete_start_position = absolute_position_to_discrete(config.start_position)
+        end
         if custom_position.override_start_position_enabled then
             imgui.end_disabled()
         end
@@ -2473,14 +2712,36 @@ function PositionalParam:draw_custom_position_ui()
         if custom_position.override_relative_distance_enabled then
             imgui.begin_disabled()
         end
-        _, config.relative_distance =
-            imgui.drag_float(
-            "Position Config " .. tostring(index) .. " Relative Distance",
-            config.relative_distance,
-            1.0,
-            self.controller.relative_distance.min,
-            self.controller.relative_distance.max
-        )
+        if custom_position.discrete_distance_enabled then
+            _, config.relative_distance_preset_index =
+                imgui.combo(
+                "Position Config " .. tostring(index) .. " Relative Distance Preset",
+                config.relative_distance_preset_index,
+                module.data.PositionParametersData.preset_relative_distance_offsets.names
+            )
+            config.relative_distance =
+                relative_distance_preset_to_value(
+                config.relative_distance_preset_index,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+            imgui.text("Current Relative Distance: " .. string.format("%.2f", config.relative_distance))
+        else
+            _, config.relative_distance =
+                imgui.drag_float(
+                "Position Config " .. tostring(index) .. " Relative Distance",
+                config.relative_distance,
+                1.0,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+            config.relative_distance_preset_index =
+                relative_distance_to_preset_index(
+                config.relative_distance,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+        end
         if custom_position.override_relative_distance_enabled then
             imgui.end_disabled()
         end
@@ -2530,7 +2791,9 @@ function PositionalParam:draw_custom_position_ui()
             {
                 enabled = true,
                 start_position = 0.0,
+                discrete_start_position = 0,
                 relative_distance = self.controller.relative_distance.min,
+                relative_distance_preset_index = 1,
                 side_index = CUSTOM_POSITION_SIDE_RANDOM,
                 frequency = 1
             }
