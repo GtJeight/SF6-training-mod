@@ -1381,6 +1381,206 @@ local PositionalParam = {
     controller = {}
 }
 
+local POSITION_ADJUSTMENT_MODE_STANDARD = 1
+local POSITION_ADJUSTMENT_MODE_CUSTOM = 2
+local POSITION_ADJUSTMENT_MODE_NAMES = {
+    "Standard Position Controls",
+    "Custom Position Configs"
+}
+
+local CUSTOM_POSITION_SIDE_RANDOM = 1
+local CUSTOM_POSITION_SIDE_PLAYER_LEFT = 2
+local CUSTOM_POSITION_SIDE_PLAYER_RIGHT = 3
+local CUSTOM_POSITION_SIDE_NAMES = {
+    "Random",
+    "Player on Left",
+    "Player on Right"
+}
+
+local function begin_position_config_indent()
+    if imgui.indent then
+        imgui.indent()
+    end
+end
+
+local function end_position_config_indent()
+    if imgui.unindent then
+        imgui.unindent()
+    end
+end
+
+local function clamp_position_value(value)
+    return math.max(
+        module.data.PositionParametersData.default_screen_position.min,
+        math.min(value or 0.0, module.data.PositionParametersData.default_screen_position.max)
+    )
+end
+
+local function clamp_custom_position_side(side_index)
+    if
+        side_index ~= CUSTOM_POSITION_SIDE_RANDOM and side_index ~= CUSTOM_POSITION_SIDE_PLAYER_LEFT and
+            side_index ~= CUSTOM_POSITION_SIDE_PLAYER_RIGHT
+     then
+        return CUSTOM_POSITION_SIDE_RANDOM
+    end
+
+    return side_index
+end
+
+function PositionalParam:ensure_custom_position_defaults()
+    self.controller.screen_position = self.controller.screen_position or {}
+    if type(self.controller.screen_position.adjustment_mode) ~= "number" then
+        self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_STANDARD
+    end
+    if
+        self.controller.screen_position.adjustment_mode < POSITION_ADJUSTMENT_MODE_STANDARD or
+            self.controller.screen_position.adjustment_mode > POSITION_ADJUSTMENT_MODE_CUSTOM
+     then
+        self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_STANDARD
+    end
+
+    self.controller.custom_position = self.controller.custom_position or {}
+    local custom_position = self.controller.custom_position
+
+    if custom_position.override_start_position_enabled == nil then
+        custom_position.override_start_position_enabled = false
+    end
+    custom_position.override_start_position = clamp_position_value(custom_position.override_start_position or 0.0)
+
+    if custom_position.override_relative_distance_enabled == nil then
+        custom_position.override_relative_distance_enabled = false
+    end
+    custom_position.override_relative_distance =
+        math.max(
+        self.controller.relative_distance.min,
+        math.min(custom_position.override_relative_distance or self.controller.relative_distance.min, self.controller.relative_distance.max)
+    )
+
+    if custom_position.override_side_enabled == nil then
+        custom_position.override_side_enabled = false
+    end
+    custom_position.override_side_index = clamp_custom_position_side(custom_position.override_side_index)
+
+    if custom_position.equal_frequency == nil then
+        custom_position.equal_frequency = false
+    end
+
+    custom_position.configs = custom_position.configs or {
+        {
+            enabled = true,
+            start_position = 0.0,
+            relative_distance = self.controller.relative_distance.min,
+            side_index = CUSTOM_POSITION_SIDE_RANDOM,
+            frequency = 1
+        }
+    }
+
+    if #custom_position.configs == 0 then
+        table.insert(
+            custom_position.configs,
+            {
+                enabled = true,
+                start_position = 0.0,
+                relative_distance = self.controller.relative_distance.min,
+                side_index = CUSTOM_POSITION_SIDE_RANDOM,
+                frequency = 1
+            }
+        )
+    end
+
+    for _, config in ipairs(custom_position.configs) do
+        if config.enabled == nil then
+            config.enabled = true
+        end
+        config.start_position = clamp_position_value(config.start_position or 0.0)
+        config.relative_distance =
+            math.max(
+            self.controller.relative_distance.min,
+            math.min(config.relative_distance or self.controller.relative_distance.min, self.controller.relative_distance.max)
+        )
+        config.side_index = clamp_custom_position_side(config.side_index)
+        config.frequency = math.max(1, math.min(config.frequency or 1, 10))
+    end
+end
+
+function PositionalParam:get_active_custom_position_config()
+    local custom_position = self.controller.custom_position
+    local current_config_index = custom_position.current_config_index
+    local current_config = current_config_index and custom_position.configs[current_config_index]
+
+    if current_config and current_config.enabled then
+        return current_config
+    end
+
+    for index, config in ipairs(custom_position.configs) do
+        if config.enabled then
+            custom_position.current_config_index = index
+            return config
+        end
+    end
+
+    custom_position.current_config_index = nil
+    return nil
+end
+
+function PositionalParam:apply_custom_position_config(config)
+    local char_id1 = self.model.PlayerDatas[0].FighterID
+    local char_id2 = self.model.PlayerDatas[1].FighterID
+    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+    local total_offset = offset1 + offset2
+
+    local custom_position = self.controller.custom_position
+    local start_position = config.start_position
+    if custom_position.override_start_position_enabled then
+        start_position = custom_position.override_start_position
+    end
+
+    local relative_distance = config.relative_distance
+    if custom_position.override_relative_distance_enabled then
+        relative_distance = custom_position.override_relative_distance
+    end
+
+    local side_index = config.side_index
+    if custom_position.override_side_enabled then
+        side_index = custom_position.override_side_index
+    end
+
+    if side_index == CUSTOM_POSITION_SIDE_RANDOM then
+        if math.random(0, 1) == 0 then
+            side_index = CUSTOM_POSITION_SIDE_PLAYER_LEFT
+        else
+            side_index = CUSTOM_POSITION_SIDE_PLAYER_RIGHT
+        end
+    end
+
+    local manual_distance = relative_distance + total_offset
+    local left_pos = start_position - (manual_distance / 2.0)
+    local right_pos = start_position + (manual_distance / 2.0)
+    local screen_min = module.data.PositionParametersData.default_screen_position.min
+    local screen_max = module.data.PositionParametersData.default_screen_position.max
+
+    if left_pos < screen_min then
+        left_pos = screen_min
+        right_pos = screen_min + manual_distance
+    elseif right_pos > screen_max then
+        right_pos = screen_max
+        left_pos = screen_max - manual_distance
+    end
+
+    if side_index == CUSTOM_POSITION_SIDE_PLAYER_LEFT then
+        self.model.PlayerDatas[0].ManualPosX = left_pos
+        self.model.PlayerDatas[1].ManualPosX = right_pos
+    else
+        self.model.PlayerDatas[0].ManualPosX = right_pos
+        self.model.PlayerDatas[1].ManualPosX = left_pos
+    end
+
+    self.controller.relative_distance.relative_distance = relative_distance
+    self.controller.screen_position.position = start_position
+    self.model.StartLocation = 3
+end
+
 function PositionalParam:init(SelectMenuData)
     -- positional parameter initialization
     self.model = SelectMenuData
@@ -1424,6 +1624,7 @@ function PositionalParam:init(SelectMenuData)
     -- absolute screen position
 
     self.controller.screen_position.enabled = false
+    self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_STANDARD
 
     self.controller.screen_position.position = 0.0
     self.controller.screen_position.pivot_type_index = 1
@@ -1487,6 +1688,25 @@ function PositionalParam:init(SelectMenuData)
     self.view.randomizer.screen_discrete_bounds_changed = false
     self.view.randomizer.screen_continuous_bounds_changed = false
 
+    self.controller.custom_position = {
+        override_start_position_enabled = false,
+        override_start_position = 0.0,
+        override_relative_distance_enabled = false,
+        override_relative_distance = self.controller.relative_distance.min,
+        override_side_enabled = false,
+        override_side_index = CUSTOM_POSITION_SIDE_RANDOM,
+        equal_frequency = false,
+        configs = {
+            {
+                enabled = true,
+                start_position = 0.0,
+                relative_distance = self.controller.relative_distance.min,
+                side_index = CUSTOM_POSITION_SIDE_RANDOM,
+                frequency = 1
+            }
+        }
+    }
+
     --[[
         HOOKS
     ]]
@@ -1494,6 +1714,15 @@ function PositionalParam:init(SelectMenuData)
         -- no pre logic needed
     end
     local function on_post(retval)
+        if self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM then
+            self:ensure_custom_position_defaults()
+            local current_config = self:get_active_custom_position_config()
+            if current_config then
+                self:apply_custom_position_config(current_config)
+            end
+            return
+        end
+
         if not self.controller.relative_distance.enabled then
             -- if its disabled
             return
@@ -1598,6 +1827,8 @@ function PositionalParam:init(SelectMenuData)
         on_pre,
         on_post
     )
+
+    self:ensure_custom_position_defaults()
 end
 
 function PositionalParam:update()
@@ -1624,6 +1855,7 @@ function PositionalParam:update()
         self.controller.relative_distance.min,
         math.min(self.controller.relative_distance.relative_distance, self.controller.relative_distance.max)
     )
+    self:ensure_custom_position_defaults()
 
     -- relative distance changed
     if self.view.relative_distance.relative_distance_enabled_changed then
@@ -1975,6 +2207,51 @@ function PositionalParam:randomize()
 
     local need_refresh = false
 
+    self:ensure_custom_position_defaults()
+
+    if
+        self.controller.relative_distance.enabled and
+            (self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM)
+     then
+        local custom_position = self.controller.custom_position
+        local total_frequency = 0
+
+        for _, config in ipairs(custom_position.configs) do
+            if config.enabled then
+                if custom_position.equal_frequency then
+                    total_frequency = total_frequency + 1
+                else
+                    total_frequency = total_frequency + config.frequency
+                end
+            end
+        end
+
+        if total_frequency <= 0 then
+            return false
+        end
+
+        local random_frequency = math.random(1, total_frequency)
+        local accumulated_frequency = 0
+
+        for index, config in ipairs(custom_position.configs) do
+            if config.enabled then
+                if custom_position.equal_frequency then
+                    accumulated_frequency = accumulated_frequency + 1
+                else
+                    accumulated_frequency = accumulated_frequency + config.frequency
+                end
+
+                if random_frequency <= accumulated_frequency then
+                    custom_position.current_config_index = index
+                    break
+                end
+            end
+        end
+
+        self.model.StartLocation = 3
+        return true
+    end
+
     -- randomize relative distance
     if self.controller.randomizer.enabled_relative then
         need_refresh = true
@@ -2092,6 +2369,141 @@ function PositionalParam:randomize()
     return need_refresh
 end
 
+function PositionalParam:draw_custom_position_ui()
+    self:ensure_custom_position_defaults()
+
+    local custom_position = self.controller.custom_position
+    local screen_min = module.data.PositionParametersData.default_screen_position.min
+    local screen_max = module.data.PositionParametersData.default_screen_position.max
+
+    imgui.separator()
+    imgui.text("Custom Position Overrides")
+    begin_position_config_indent()
+
+    _, custom_position.override_start_position_enabled =
+        imgui.checkbox("Override Starting Position", custom_position.override_start_position_enabled)
+    if not custom_position.override_start_position_enabled then
+        imgui.begin_disabled()
+    end
+    _, custom_position.override_start_position =
+        imgui.drag_float("Override Starting Position X", custom_position.override_start_position, 1.0, screen_min, screen_max)
+    if not custom_position.override_start_position_enabled then
+        imgui.end_disabled()
+    end
+
+    _, custom_position.override_relative_distance_enabled =
+        imgui.checkbox("Override Relative Distance", custom_position.override_relative_distance_enabled)
+    if not custom_position.override_relative_distance_enabled then
+        imgui.begin_disabled()
+    end
+    _, custom_position.override_relative_distance =
+        imgui.drag_float(
+        "Override Relative Distance Value",
+        custom_position.override_relative_distance,
+        1.0,
+        self.controller.relative_distance.min,
+        self.controller.relative_distance.max
+    )
+    if not custom_position.override_relative_distance_enabled then
+        imgui.end_disabled()
+    end
+
+    _, custom_position.override_side_enabled =
+        imgui.checkbox("Override Player Side", custom_position.override_side_enabled)
+    if not custom_position.override_side_enabled then
+        imgui.begin_disabled()
+    end
+    _, custom_position.override_side_index =
+        imgui.combo("Override Player Side Value", custom_position.override_side_index, CUSTOM_POSITION_SIDE_NAMES)
+    if not custom_position.override_side_enabled then
+        imgui.end_disabled()
+    end
+
+    _, custom_position.equal_frequency =
+        imgui.checkbox("Use Equal Frequency for Enabled Position Configurations", custom_position.equal_frequency)
+
+    end_position_config_indent()
+
+    imgui.separator()
+    imgui.text("Custom Position Configurations")
+
+    local remove_index = nil
+    for index, config in ipairs(custom_position.configs) do
+        imgui.separator()
+        imgui.text("Position Configuration " .. tostring(index))
+        begin_position_config_indent()
+
+        _, config.enabled = imgui.checkbox("Enable Position Config " .. tostring(index), config.enabled)
+
+        if not config.enabled then
+            imgui.begin_disabled()
+        end
+
+        _, config.start_position =
+            imgui.drag_float(
+            "Position Config " .. tostring(index) .. " Starting Position X",
+            config.start_position,
+            1.0,
+            screen_min,
+            screen_max
+        )
+
+        _, config.relative_distance =
+            imgui.drag_float(
+            "Position Config " .. tostring(index) .. " Relative Distance",
+            config.relative_distance,
+            1.0,
+            self.controller.relative_distance.min,
+            self.controller.relative_distance.max
+        )
+
+        _, config.side_index =
+            imgui.combo("Position Config " .. tostring(index) .. " Player Side", config.side_index, CUSTOM_POSITION_SIDE_NAMES)
+
+        if custom_position.equal_frequency then
+            imgui.begin_disabled()
+        end
+        _, config.frequency =
+            imgui.slider_int("Position Config " .. tostring(index) .. " Frequency (1 to 10)", config.frequency, 1, 10)
+        if custom_position.equal_frequency then
+            imgui.end_disabled()
+        end
+
+        if not config.enabled then
+            imgui.end_disabled()
+        end
+
+        if #custom_position.configs > 1 and imgui.button("Delete Position Config " .. tostring(index)) then
+            remove_index = index
+        end
+
+        end_position_config_indent()
+    end
+
+    if remove_index ~= nil then
+        table.remove(custom_position.configs, remove_index)
+        if custom_position.current_config_index == remove_index then
+            custom_position.current_config_index = nil
+        elseif custom_position.current_config_index and custom_position.current_config_index > remove_index then
+            custom_position.current_config_index = custom_position.current_config_index - 1
+        end
+    end
+
+    imgui.separator()
+    if imgui.button("Add Position Configuration") then
+        table.insert(
+            custom_position.configs,
+            {
+                enabled = true,
+                start_position = 0.0,
+                relative_distance = self.controller.relative_distance.min,
+                side_index = CUSTOM_POSITION_SIDE_RANDOM,
+                frequency = 1
+            }
+        )
+    end
+end
+
 function PositionalParam:draw_ui()
     -- positional parameter UI logic
 
@@ -2101,6 +2513,20 @@ function PositionalParam:draw_ui()
     imgui.separator()
 
     if self.controller.relative_distance.enabled then
+        self:ensure_custom_position_defaults()
+        _, self.controller.screen_position.adjustment_mode =
+            imgui.combo(
+            "Start Position Adjustment Mode",
+            self.controller.screen_position.adjustment_mode,
+            POSITION_ADJUSTMENT_MODE_NAMES
+        )
+        imgui.separator()
+
+        if self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM then
+            self:draw_custom_position_ui()
+            return
+        end
+
         self.controller.relative_distance.discrete_relative_distance_enabled_changed,
             self.controller.relative_distance.discrete_enabled =
             imgui.checkbox("Use Preset Relative Distances", self.controller.relative_distance.discrete_enabled)
@@ -2472,6 +2898,7 @@ function module.init()
     end
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p1)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p2)
+    PositionalParam:ensure_custom_position_defaults()
 
     -- initialize refresh request flag
     module.request_refresh = false
