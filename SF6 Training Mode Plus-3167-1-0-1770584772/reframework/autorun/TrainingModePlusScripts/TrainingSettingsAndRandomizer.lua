@@ -51,6 +51,85 @@ local PlayerParam = {
     }
 }
 
+local HEALTH_RANDOMIZER_MODE_RANGE = 1
+local HEALTH_RANDOMIZER_MODE_CUSTOM = 2
+local HEALTH_RANDOMIZER_MODE_NAMES = {
+    "Default / Bounded Range",
+    "Custom Weighted Configs"
+}
+
+local function begin_health_config_indent()
+    if imgui.indent then
+        imgui.indent()
+    end
+end
+
+local function end_health_config_indent()
+    if imgui.unindent then
+        imgui.unindent()
+    end
+end
+
+local function ensure_health_randomizer_defaults(health_randomizer)
+    if health_randomizer.enabled == nil then
+        health_randomizer.enabled = false
+    end
+    if health_randomizer.bounds_enabled == nil then
+        health_randomizer.bounds_enabled = false
+    end
+    health_randomizer.lower_bound = health_randomizer.lower_bound or 0
+    health_randomizer.upper_bound = health_randomizer.upper_bound or 100
+
+    if type(health_randomizer.mode) ~= "number" then
+        health_randomizer.mode = HEALTH_RANDOMIZER_MODE_RANGE
+    end
+    if
+        health_randomizer.mode < HEALTH_RANDOMIZER_MODE_RANGE or
+            health_randomizer.mode > HEALTH_RANDOMIZER_MODE_CUSTOM
+     then
+        health_randomizer.mode = HEALTH_RANDOMIZER_MODE_RANGE
+    end
+
+    if health_randomizer.custom_equal_frequency == nil then
+        health_randomizer.custom_equal_frequency = false
+    end
+
+    health_randomizer.custom_configs = health_randomizer.custom_configs or {
+        {
+            enabled = true,
+            lower_bound = 1,
+            upper_bound = 100,
+            frequency = 1
+        }
+    }
+
+    if #health_randomizer.custom_configs == 0 then
+        table.insert(
+            health_randomizer.custom_configs,
+            {
+                enabled = true,
+                lower_bound = 1,
+                upper_bound = 100,
+                frequency = 1
+            }
+        )
+    end
+
+    for _, config in ipairs(health_randomizer.custom_configs) do
+        if config.enabled == nil then
+            config.enabled = true
+        end
+        config.lower_bound = math.max(1, math.min(config.lower_bound or 1, 100))
+        config.upper_bound = math.max(config.lower_bound, math.min(config.upper_bound or 100, 100))
+        config.frequency = math.max(1, math.min(config.frequency or 1, 10))
+    end
+end
+
+local function ensure_player_health_randomizer_defaults(PlayerController)
+    PlayerController.health_randomizer = PlayerController.health_randomizer or {}
+    ensure_health_randomizer_defaults(PlayerController.health_randomizer)
+end
+
 local DRIVE_RANDOMIZER_MODE_RANGE = 1
 local DRIVE_RANDOMIZER_MODE_CUSTOM = 3
 local DRIVE_RANDOMIZER_MODE_NAMES = {
@@ -168,8 +247,18 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     PlayerController.health_randomizer = {}
     PlayerController.health_randomizer.enabled = false -- health randomizer enabled flag
     PlayerController.health_randomizer.bounds_enabled = false -- health randomizer bounds enabled flag
+    PlayerController.health_randomizer.mode = HEALTH_RANDOMIZER_MODE_RANGE
     PlayerController.health_randomizer.lower_bound = 0 -- health randomizer lower bound
     PlayerController.health_randomizer.upper_bound = 100 -- health randomizer upper bound
+    PlayerController.health_randomizer.custom_equal_frequency = false
+    PlayerController.health_randomizer.custom_configs = {
+        {
+            enabled = true,
+            lower_bound = 1,
+            upper_bound = 100,
+            frequency = 1
+        }
+    }
 
     -- define the view variables
     PlayerView.health = PlayerParams.Vital_Point -- current health value
@@ -343,13 +432,51 @@ function PlayerParam:randomize_player_health(PlayerIndex)
     local PlayerModel = self.model[PlayerIndex]
     local PlayerView = self.view[PlayerIndex]
     local PlayerController = self.controller[PlayerIndex]
+    local HealthRandomizer = PlayerController.health_randomizer
+
+    ensure_health_randomizer_defaults(HealthRandomizer)
+
+    if HealthRandomizer.mode == HEALTH_RANDOMIZER_MODE_CUSTOM then
+        local total_frequency = 0
+        for _, config in ipairs(HealthRandomizer.custom_configs) do
+            if config.enabled then
+                if HealthRandomizer.custom_equal_frequency then
+                    total_frequency = total_frequency + 1
+                else
+                    total_frequency = total_frequency + config.frequency
+                end
+            end
+        end
+
+        if total_frequency <= 0 then
+            return
+        end
+
+        local random_frequency = math.random(1, total_frequency)
+        local accumulated_frequency = 0
+
+        for _, config in ipairs(HealthRandomizer.custom_configs) do
+            if config.enabled then
+                if HealthRandomizer.custom_equal_frequency then
+                    accumulated_frequency = accumulated_frequency + 1
+                else
+                    accumulated_frequency = accumulated_frequency + config.frequency
+                end
+
+                if random_frequency <= accumulated_frequency then
+                    PlayerModel.Vital_Point = math.random(config.lower_bound, config.upper_bound)
+                    return
+                end
+            end
+        end
+    end
 
     -- randomize health logic
     local lower_bound = 0
     local upper_bound = 100
-    if PlayerController.health_randomizer.bounds_enabled then
-        lower_bound = PlayerController.health_randomizer.lower_bound
-        upper_bound = PlayerController.health_randomizer.upper_bound
+    if HealthRandomizer.bounds_enabled then
+        lower_bound = HealthRandomizer.lower_bound
+        upper_bound = HealthRandomizer.upper_bound
     end
     local randomized_health = math.random(lower_bound, upper_bound)
     PlayerModel.Vital_Point = randomized_health
@@ -501,29 +628,121 @@ function PlayerParam:draw_health_ui(PlayerIndex)
         imgui.checkbox("Toggle " .. PlayerLabel .. " Health Randomization", PlayerController.health_randomizer.enabled)
 
     if PlayerController.health_randomizer.enabled then
-        _, PlayerController.health_randomizer.bounds_enabled =
-            imgui.checkbox(
-            "Enable Bounds for " .. PlayerLabel .. " Health Randomization",
-            PlayerController.health_randomizer.bounds_enabled
+        ensure_health_randomizer_defaults(PlayerController.health_randomizer)
+
+        _, PlayerController.health_randomizer.mode =
+            imgui.combo(
+            PlayerLabel .. " Health Randomization Mode",
+            PlayerController.health_randomizer.mode,
+            HEALTH_RANDOMIZER_MODE_NAMES
         )
-        if PlayerController.health_randomizer.bounds_enabled then
-            -- show the bounds sliders
-            _, PlayerController.health_randomizer.lower_bound =
-                imgui.drag_int(
-                PlayerLabel .. " Health Randomization Lower Bound",
-                PlayerController.health_randomizer.lower_bound,
-                0.3,
-                0,
-                PlayerController.health_randomizer.upper_bound
+
+        if PlayerController.health_randomizer.mode == HEALTH_RANDOMIZER_MODE_RANGE then
+            _, PlayerController.health_randomizer.bounds_enabled =
+                imgui.checkbox(
+                "Enable Bounds for " .. PlayerLabel .. " Health Randomization",
+                PlayerController.health_randomizer.bounds_enabled
             )
-            _, PlayerController.health_randomizer.upper_bound =
-                imgui.drag_int(
-                PlayerLabel .. " Health Randomization Upper Bound",
-                PlayerController.health_randomizer.upper_bound,
-                0.3,
-                PlayerController.health_randomizer.lower_bound,
-                100
+
+            if PlayerController.health_randomizer.bounds_enabled then
+                -- show the bounds sliders
+                _, PlayerController.health_randomizer.lower_bound =
+                    imgui.drag_int(
+                    PlayerLabel .. " Health Randomization Lower Bound",
+                    PlayerController.health_randomizer.lower_bound,
+                    0.3,
+                    0,
+                    PlayerController.health_randomizer.upper_bound
+                )
+                _, PlayerController.health_randomizer.upper_bound =
+                    imgui.drag_int(
+                    PlayerLabel .. " Health Randomization Upper Bound",
+                    PlayerController.health_randomizer.upper_bound,
+                    0.3,
+                    PlayerController.health_randomizer.lower_bound,
+                    100
+                )
+            end
+        elseif PlayerController.health_randomizer.mode == HEALTH_RANDOMIZER_MODE_CUSTOM then
+            imgui.separator()
+            imgui.text(PlayerLabel .. " Custom Health Configurations")
+
+            _, PlayerController.health_randomizer.custom_equal_frequency =
+                imgui.checkbox(
+                PlayerLabel .. " Use Equal Frequency for Enabled Health Configurations",
+                PlayerController.health_randomizer.custom_equal_frequency
             )
+
+            local remove_index = nil
+            for index, config in ipairs(PlayerController.health_randomizer.custom_configs) do
+                imgui.separator()
+                imgui.text("Health Configuration " .. tostring(index))
+                begin_health_config_indent()
+
+                _, config.enabled =
+                    imgui.checkbox(PlayerLabel .. " Enable Health Config " .. tostring(index), config.enabled)
+
+                if not config.enabled then
+                    imgui.begin_disabled()
+                end
+
+                _, config.lower_bound =
+                    imgui.slider_int(
+                    PlayerLabel .. " Config " .. tostring(index) .. " Health Lower Bound",
+                    config.lower_bound,
+                    1,
+                    config.upper_bound
+                )
+                _, config.upper_bound =
+                    imgui.slider_int(
+                    PlayerLabel .. " Config " .. tostring(index) .. " Health Upper Bound",
+                    config.upper_bound,
+                    config.lower_bound,
+                    100
+                )
+                if PlayerController.health_randomizer.custom_equal_frequency then
+                    imgui.begin_disabled()
+                end
+                _, config.frequency =
+                    imgui.slider_int(
+                    PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)",
+                    config.frequency,
+                    1,
+                    10
+                )
+                if PlayerController.health_randomizer.custom_equal_frequency then
+                    imgui.end_disabled()
+                end
+
+                if not config.enabled then
+                    imgui.end_disabled()
+                end
+
+                if
+                    #PlayerController.health_randomizer.custom_configs > 1 and
+                        imgui.button(PlayerLabel .. " Delete Health Config " .. tostring(index))
+                 then
+                    remove_index = index
+                end
+                end_health_config_indent()
+            end
+
+            if remove_index ~= nil then
+                table.remove(PlayerController.health_randomizer.custom_configs, remove_index)
+            end
+
+            imgui.separator()
+            if imgui.button(PlayerLabel .. " Add Health Configuration") then
+                table.insert(
+                    PlayerController.health_randomizer.custom_configs,
+                    {
+                        enabled = true,
+                        lower_bound = 1,
+                        upper_bound = 100,
+                        frequency = 1
+                    }
+                )
+            end
         end
     end
 end
@@ -2550,10 +2769,6 @@ function PositionalParam:draw_custom_position_ui()
     local screen_min = module.data.PositionParametersData.default_screen_position.min
     local screen_max = module.data.PositionParametersData.default_screen_position.max
 
-    imgui.separator()
-    imgui.text("Custom Position Input Mode")
-    begin_position_config_indent()
-
     local discrete_position_changed = false
     discrete_position_changed, custom_position.discrete_position_enabled =
         imgui.checkbox("Use Discrete Position Values", custom_position.discrete_position_enabled)
@@ -2574,6 +2789,38 @@ function PositionalParam:draw_custom_position_ui()
             end
         end
     end
+
+    _, custom_position.override_start_position_enabled =
+        imgui.checkbox("Override Starting Position", custom_position.override_start_position_enabled)
+    if not custom_position.override_start_position_enabled then
+        imgui.begin_disabled()
+    end
+    if custom_position.discrete_position_enabled then
+        _, custom_position.override_discrete_start_position =
+            imgui.slider_int(
+            "Override Starting Position Reference",
+            custom_position.override_discrete_start_position,
+            -6,
+            6
+        )
+        custom_position.override_start_position = discrete_position_to_absolute(custom_position.override_discrete_start_position)
+    else
+        _, custom_position.override_start_position =
+            imgui.drag_float(
+            "Override Starting Position X",
+            custom_position.override_start_position,
+            1.0,
+            screen_min,
+            screen_max
+        )
+        custom_position.override_discrete_start_position =
+            absolute_position_to_discrete(custom_position.override_start_position)
+    end
+    if not custom_position.override_start_position_enabled then
+        imgui.end_disabled()
+    end
+
+    imgui.separator()
 
     local discrete_distance_changed = false
     discrete_distance_changed, custom_position.discrete_distance_enabled =
@@ -2612,42 +2859,6 @@ function PositionalParam:draw_custom_position_ui()
                 )
             end
         end
-    end
-
-    end_position_config_indent()
-
-    imgui.separator()
-    imgui.text("Custom Position Overrides")
-    begin_position_config_indent()
-
-    _, custom_position.override_start_position_enabled =
-        imgui.checkbox("Override Starting Position", custom_position.override_start_position_enabled)
-    if not custom_position.override_start_position_enabled then
-        imgui.begin_disabled()
-    end
-    if custom_position.discrete_position_enabled then
-        _, custom_position.override_discrete_start_position =
-            imgui.slider_int(
-            "Override Starting Position Reference",
-            custom_position.override_discrete_start_position,
-            -6,
-            6
-        )
-        custom_position.override_start_position = discrete_position_to_absolute(custom_position.override_discrete_start_position)
-    else
-        _, custom_position.override_start_position =
-            imgui.drag_float(
-            "Override Starting Position X",
-            custom_position.override_start_position,
-            1.0,
-            screen_min,
-            screen_max
-        )
-        custom_position.override_discrete_start_position =
-            absolute_position_to_discrete(custom_position.override_start_position)
-    end
-    if not custom_position.override_start_position_enabled then
-        imgui.end_disabled()
     end
 
     _, custom_position.override_relative_distance_enabled =
@@ -2710,8 +2921,6 @@ function PositionalParam:draw_custom_position_ui()
 
     _, custom_position.equal_frequency =
         imgui.checkbox("Use Equal Frequency for Enabled Position Configurations", custom_position.equal_frequency)
-
-    end_position_config_indent()
 
     imgui.separator()
     imgui.text("Custom Position Configurations")
@@ -3243,6 +3452,8 @@ function module.init()
         PositionalParam.controller = config_file.PositionalParam or PositionalParam.controller
         module.hotkeys = config_file.Hotkeys or module.hotkeys
     end
+    ensure_player_health_randomizer_defaults(PlayerParam.controller.p1)
+    ensure_player_health_randomizer_defaults(PlayerParam.controller.p2)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p1)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p2)
     PositionalParam:ensure_custom_position_defaults()
