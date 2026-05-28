@@ -1485,6 +1485,18 @@ local function clamp_custom_position_side(side_index)
     return side_index
 end
 
+local function is_resolved_custom_position_side(side_index)
+    return side_index == CUSTOM_POSITION_SIDE_PLAYER_LEFT or side_index == CUSTOM_POSITION_SIDE_PLAYER_RIGHT
+end
+
+local function random_custom_position_side()
+    if math.random(0, 1) == 0 then
+        return CUSTOM_POSITION_SIDE_PLAYER_LEFT
+    end
+
+    return CUSTOM_POSITION_SIDE_PLAYER_RIGHT
+end
+
 function PositionalParam:ensure_custom_position_defaults()
     self.controller.screen_position = self.controller.screen_position or {}
     if type(self.controller.screen_position.adjustment_mode) ~= "number" then
@@ -1531,6 +1543,12 @@ function PositionalParam:ensure_custom_position_defaults()
         custom_position.override_side_enabled = false
     end
     custom_position.override_side_index = clamp_custom_position_side(custom_position.override_side_index)
+    if
+        custom_position.override_resolved_side_index ~= nil and
+            not is_resolved_custom_position_side(custom_position.override_resolved_side_index)
+     then
+        custom_position.override_resolved_side_index = nil
+    end
 
     if custom_position.equal_frequency == nil then
         custom_position.equal_frequency = false
@@ -1591,6 +1609,9 @@ function PositionalParam:ensure_custom_position_defaults()
                 )
         )
         config.side_index = clamp_custom_position_side(config.side_index)
+        if config.resolved_side_index ~= nil and not is_resolved_custom_position_side(config.resolved_side_index) then
+            config.resolved_side_index = nil
+        end
         config.frequency = math.max(1, math.min(config.frequency or 1, 10))
     end
 end
@@ -1613,6 +1634,33 @@ function PositionalParam:get_active_custom_position_config()
 
     custom_position.current_config_index = nil
     return nil
+end
+
+function PositionalParam:resolve_custom_position_side(config, reroll_random)
+    local custom_position = self.controller.custom_position
+    local side_index = config.side_index
+
+    if custom_position.override_side_enabled then
+        side_index = custom_position.override_side_index
+    end
+
+    if side_index ~= CUSTOM_POSITION_SIDE_RANDOM then
+        return side_index
+    end
+
+    if custom_position.override_side_enabled then
+        if reroll_random or not is_resolved_custom_position_side(custom_position.override_resolved_side_index) then
+            custom_position.override_resolved_side_index = random_custom_position_side()
+        end
+
+        return custom_position.override_resolved_side_index
+    end
+
+    if reroll_random or not is_resolved_custom_position_side(config.resolved_side_index) then
+        config.resolved_side_index = random_custom_position_side()
+    end
+
+    return config.resolved_side_index
 end
 
 function PositionalParam:apply_custom_position_config(config)
@@ -1655,18 +1703,7 @@ function PositionalParam:apply_custom_position_config(config)
         end
     end
 
-    local side_index = config.side_index
-    if custom_position.override_side_enabled then
-        side_index = custom_position.override_side_index
-    end
-
-    if side_index == CUSTOM_POSITION_SIDE_RANDOM then
-        if math.random(0, 1) == 0 then
-            side_index = CUSTOM_POSITION_SIDE_PLAYER_LEFT
-        else
-            side_index = CUSTOM_POSITION_SIDE_PLAYER_RIGHT
-        end
-    end
+    local side_index = self:resolve_custom_position_side(config, false)
 
     local manual_distance = relative_distance + total_offset
     local left_pos = start_position - (manual_distance / 2.0)
@@ -2379,6 +2416,7 @@ function PositionalParam:randomize()
 
                 if random_frequency <= accumulated_frequency then
                     custom_position.current_config_index = index
+                    self:resolve_custom_position_side(config, true)
                     break
                 end
             end
@@ -2651,13 +2689,21 @@ function PositionalParam:draw_custom_position_ui()
         imgui.end_disabled()
     end
 
-    _, custom_position.override_side_enabled =
+    local override_side_enabled_changed = false
+    override_side_enabled_changed, custom_position.override_side_enabled =
         imgui.checkbox("Override Player Side", custom_position.override_side_enabled)
+    if override_side_enabled_changed then
+        custom_position.override_resolved_side_index = nil
+    end
     if not custom_position.override_side_enabled then
         imgui.begin_disabled()
     end
-    _, custom_position.override_side_index =
+    local override_side_changed = false
+    override_side_changed, custom_position.override_side_index =
         imgui.combo("Override Player Side Value", custom_position.override_side_index, CUSTOM_POSITION_SIDE_NAMES)
+    if override_side_changed then
+        custom_position.override_resolved_side_index = nil
+    end
     if not custom_position.override_side_enabled then
         imgui.end_disabled()
     end
@@ -2749,8 +2795,12 @@ function PositionalParam:draw_custom_position_ui()
         if custom_position.override_side_enabled then
             imgui.begin_disabled()
         end
-        _, config.side_index =
+        local config_side_changed = false
+        config_side_changed, config.side_index =
             imgui.combo("Position Config " .. tostring(index) .. " Player Side", config.side_index, CUSTOM_POSITION_SIDE_NAMES)
+        if config_side_changed then
+            config.resolved_side_index = nil
+        end
         if custom_position.override_side_enabled then
             imgui.end_disabled()
         end
