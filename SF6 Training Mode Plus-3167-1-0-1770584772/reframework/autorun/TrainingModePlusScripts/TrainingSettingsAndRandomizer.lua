@@ -1201,21 +1201,6 @@ function PlayerParam:randomize()
     self:randomize_player_super("p2")
 end
 
-function PlayerParam:disable_randomizers()
-    for _, PlayerIndex in ipairs({"p1", "p2"}) do
-        local PlayerController = self.controller[PlayerIndex]
-        if PlayerController.health_randomizer then
-            PlayerController.health_randomizer.enabled = false
-        end
-        if PlayerController.drive_randomizer then
-            PlayerController.drive_randomizer.enabled = false
-        end
-        if PlayerController.super_randomizer then
-            PlayerController.super_randomizer.enabled = false
-        end
-    end
-end
-
 --[[
     Unique character gauges
 ]]
@@ -1406,28 +1391,6 @@ function UniqueGaugeParam:randomize()
                         end
                         local random_value = math.random(lower_bound, upper_bound)
                         self.model[stockData.id] = random_value
-                    end
-                end
-            end
-        end
-    end
-end
-
-function UniqueGaugeParam:disable_randomizers()
-    for _, charData in pairs(module.data.UniqueCharData) do
-        if self.controller[charData.name] then
-            if charData.timers then
-                for _, timerData in pairs(charData.timers) do
-                    if self.controller[charData.name][timerData.id] then
-                        self.controller[charData.name][timerData.id].randomizer_enabled = false
-                    end
-                end
-            end
-
-            if charData.stocks then
-                for _, stockData in pairs(charData.stocks) do
-                    if self.controller[charData.name][stockData.id] then
-                        self.controller[charData.name][stockData.id].randomizer_enabled = false
                     end
                 end
             end
@@ -2801,13 +2764,6 @@ function PositionalParam:randomize()
     return need_refresh
 end
 
-function PositionalParam:disable_randomizers()
-    if self.controller.randomizer then
-        self.controller.randomizer.enabled_relative = false
-        self.controller.randomizer.enabled_screen = false
-    end
-end
-
 function PositionalParam:draw_custom_position_ui()
     self:ensure_custom_position_defaults()
 
@@ -3503,9 +3459,6 @@ function module.init()
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p1)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p2)
     PositionalParam:ensure_custom_position_defaults()
-    PlayerParam:disable_randomizers()
-    UniqueGaugeParam:disable_randomizers()
-    PositionalParam:disable_randomizers()
 
     -- initialize refresh request flag
     module.request_refresh = false

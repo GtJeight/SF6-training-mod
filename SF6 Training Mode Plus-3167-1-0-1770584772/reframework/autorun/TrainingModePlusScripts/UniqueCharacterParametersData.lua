@@ -208,6 +208,27 @@ UniqueCharData[30] = {
     }
 }
 
+UniqueCharData[32] = {
+    name = "Ingrid",
+    stocks = {
+        {
+            id = "stock_0_032",
+            name = "Sun Crests",
+            maxValue = 4,
+            minValue = 0,
+            allowInfinite = false,
+            correspond = true,
+            descriptors = {
+                "0",
+                "1",
+                "2",
+                "3",
+                "4"
+            }
+        }
+    }
+}
+
 UniqueCharData[5] = {
     name = "Manon",
     stocks = {
