@@ -216,7 +216,7 @@ UniqueCharData[32] = {
             name = "Sun Crests",
             maxValue = 4,
             minValue = 0,
-            allowInfinite = false,
+            allowInfinite = true,
             correspond = true,
             descriptors = {
                 "0",

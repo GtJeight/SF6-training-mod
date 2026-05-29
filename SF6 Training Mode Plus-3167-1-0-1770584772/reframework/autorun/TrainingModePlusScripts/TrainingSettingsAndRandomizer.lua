@@ -51,13 +51,6 @@ local PlayerParam = {
     }
 }
 
-local HEALTH_RANDOMIZER_MODE_RANGE = 1
-local HEALTH_RANDOMIZER_MODE_CUSTOM = 2
-local HEALTH_RANDOMIZER_MODE_NAMES = {
-    "Default / Bounded Range",
-    "Custom Weighted Configs"
-}
-
 local function begin_health_config_indent()
     if imgui.indent then
         imgui.indent()
@@ -80,15 +73,7 @@ local function ensure_health_randomizer_defaults(health_randomizer)
     health_randomizer.lower_bound = health_randomizer.lower_bound or 0
     health_randomizer.upper_bound = health_randomizer.upper_bound or 100
 
-    if type(health_randomizer.mode) ~= "number" then
-        health_randomizer.mode = HEALTH_RANDOMIZER_MODE_RANGE
-    end
-    if
-        health_randomizer.mode < HEALTH_RANDOMIZER_MODE_RANGE or
-            health_randomizer.mode > HEALTH_RANDOMIZER_MODE_CUSTOM
-     then
-        health_randomizer.mode = HEALTH_RANDOMIZER_MODE_RANGE
-    end
+    health_randomizer.mode = "custom"
 
     if health_randomizer.custom_equal_frequency == nil then
         health_randomizer.custom_equal_frequency = false
@@ -130,13 +115,6 @@ local function ensure_player_health_randomizer_defaults(PlayerController)
     ensure_health_randomizer_defaults(PlayerController.health_randomizer)
 end
 
-local DRIVE_RANDOMIZER_MODE_RANGE = 1
-local DRIVE_RANDOMIZER_MODE_CUSTOM = 3
-local DRIVE_RANDOMIZER_MODE_NAMES = {
-    "Default / Bounded Range",
-    "Custom Weighted Configs"
-}
-
 local function begin_drive_config_indent()
     if imgui.indent then
         imgui.indent()
@@ -161,18 +139,7 @@ local function ensure_drive_randomizer_defaults(drive_randomizer)
     drive_randomizer.lower_bound_points = drive_randomizer.lower_bound_points or 0
     drive_randomizer.upper_bound_points = drive_randomizer.upper_bound_points or 60000
 
-    if drive_randomizer.mode == 2 then
-        -- Compatibility with the previous three-option version: mode 2 was bounded range.
-        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
-    elseif type(drive_randomizer.mode) ~= "number" then
-        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
-    end
-    if
-        drive_randomizer.mode < DRIVE_RANDOMIZER_MODE_RANGE or
-            drive_randomizer.mode > DRIVE_RANDOMIZER_MODE_CUSTOM
-     then
-        drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
-    end
+    drive_randomizer.mode = "custom"
 
     if drive_randomizer.custom_equal_frequency == nil then
         drive_randomizer.custom_equal_frequency = false
@@ -247,7 +214,7 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     PlayerController.health_randomizer = {}
     PlayerController.health_randomizer.enabled = false -- health randomizer enabled flag
     PlayerController.health_randomizer.bounds_enabled = false -- health randomizer bounds enabled flag
-    PlayerController.health_randomizer.mode = HEALTH_RANDOMIZER_MODE_RANGE
+    PlayerController.health_randomizer.mode = "custom"
     PlayerController.health_randomizer.lower_bound = 0 -- health randomizer lower bound
     PlayerController.health_randomizer.upper_bound = 100 -- health randomizer upper bound
     PlayerController.health_randomizer.custom_equal_frequency = false
@@ -272,7 +239,7 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     PlayerController.drive_randomizer = {}
     PlayerController.drive_randomizer.enabled = false -- drive randomizer enabled flag
     PlayerController.drive_randomizer.bounds_enabled = false -- drive randomizer bounds enabled flag
-    PlayerController.drive_randomizer.mode = DRIVE_RANDOMIZER_MODE_RANGE
+    PlayerController.drive_randomizer.mode = "custom"
     PlayerController.drive_randomizer.lower_bound_stock = 0 -- drive randomizer lower bound
     PlayerController.drive_randomizer.upper_bound_stock = 6 -- drive randomizer upper bound
     PlayerController.drive_randomizer.lower_bound_points = 0 -- drive randomizer lower bound
@@ -286,24 +253,17 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
     }
     PlayerController.drive_randomizer.custom_equal_frequency = false
 
-    -- drive points type, true == absolute, false == percentage
-    PlayerController.drive_points_type = false
-
     -- define the view variables
     PlayerView.burnout = PlayerParams.Is_DG_Break
     PlayerView.burnout_changed = false
 
     -- drive type, true == stock, false == custom
-    PlayerView.drive_type = PlayerParams.DG_Type == 1
+    PlayerView.drive_type = true
     PlayerView.drive_type_changed = false
 
     -- drive stocks
     PlayerView.drive_stocks = PlayerParams.DG_Stock
     PlayerView.drive_stocks_changed = false
-
-    -- drive points
-    PlayerView.drive_points = PlayerParams.DG_Point
-    PlayerView.drive_points_changed = false
 
     --[[
         Super parameter initialization
@@ -348,21 +308,15 @@ function PlayerParam:update_player_parameters(PlayerIndex)
             PlayerModel.Vital_Point = PlayerView.health
             need_apply = true
         end
+    else
+        PlayerView.health_changed = false
     end
 
     -- update drive logic
 
-    -- drive type
-    if PlayerView.drive_type_changed then
-        if PlayerView.drive_type then
-            -- stock type
-            PlayerModel.DG_Type = 1
-            PlayerModel.Is_DG_Point_Lock = PlayerView.original_drive_point_lock or false
-        else
-            -- custom type
-            PlayerModel.DG_Type = 3
-            PlayerModel.Is_DG_Point_Lock = true
-        end
+    if PlayerModel.DG_Type ~= 1 then
+        PlayerModel.DG_Type = 1
+        PlayerModel.Is_DG_Point_Lock = PlayerView.original_drive_point_lock or false
         need_apply = true
     end
 
@@ -375,19 +329,14 @@ function PlayerParam:update_player_parameters(PlayerIndex)
     if not PlayerController.drive_randomizer.enabled then
         -- if the randomizer is disabled, use the slider value
 
-        if PlayerView.drive_points_changed then
-            -- custom type
-            PlayerModel.DG_Point = PlayerView.drive_points
-            PlayerModel.DG_Stock = math.floor((PlayerView.drive_points + 5000) / 10000)
-            need_apply = true
-        end
-
         if PlayerView.drive_stocks_changed then
             -- stock type
             PlayerModel.DG_Stock = PlayerView.drive_stocks
             PlayerModel.DG_Point = PlayerView.drive_stocks * 10000
             need_apply = true
         end
+    else
+        PlayerView.drive_stocks_changed = false
     end
 
     -- update super logic
@@ -419,6 +368,9 @@ function PlayerParam:update_player_parameters(PlayerIndex)
             PlayerModel.SA_Point = PlayerView.super_stocks * 10000
             need_apply = true
         end
+    else
+        PlayerView.super_points_changed = false
+        PlayerView.super_stocks_changed = false
     end
 
     return need_apply
@@ -426,7 +378,7 @@ end
 
 function PlayerParam:randomize_player_health(PlayerIndex)
     if not self.controller[PlayerIndex].health_randomizer.enabled then
-        return
+        return false
     end
 
     local PlayerModel = self.model[PlayerIndex]
@@ -436,55 +388,45 @@ function PlayerParam:randomize_player_health(PlayerIndex)
 
     ensure_health_randomizer_defaults(HealthRandomizer)
 
-    if HealthRandomizer.mode == HEALTH_RANDOMIZER_MODE_CUSTOM then
-        local total_frequency = 0
-        for _, config in ipairs(HealthRandomizer.custom_configs) do
-            if config.enabled then
-                if HealthRandomizer.custom_equal_frequency then
-                    total_frequency = total_frequency + 1
-                else
-                    total_frequency = total_frequency + config.frequency
-                end
-            end
-        end
-
-        if total_frequency <= 0 then
-            return
-        end
-
-        local random_frequency = math.random(1, total_frequency)
-        local accumulated_frequency = 0
-
-        for _, config in ipairs(HealthRandomizer.custom_configs) do
-            if config.enabled then
-                if HealthRandomizer.custom_equal_frequency then
-                    accumulated_frequency = accumulated_frequency + 1
-                else
-                    accumulated_frequency = accumulated_frequency + config.frequency
-                end
-
-                if random_frequency <= accumulated_frequency then
-                    PlayerModel.Vital_Point = math.random(config.lower_bound, config.upper_bound)
-                    return
-                end
+    local total_frequency = 0
+    for _, config in ipairs(HealthRandomizer.custom_configs) do
+        if config.enabled then
+            if HealthRandomizer.custom_equal_frequency then
+                total_frequency = total_frequency + 1
+            else
+                total_frequency = total_frequency + config.frequency
             end
         end
     end
 
-    -- randomize health logic
-    local lower_bound = 0
-    local upper_bound = 100
-    if HealthRandomizer.bounds_enabled then
-        lower_bound = HealthRandomizer.lower_bound
-        upper_bound = HealthRandomizer.upper_bound
+    if total_frequency <= 0 then
+        return false
     end
-    local randomized_health = math.random(lower_bound, upper_bound)
-    PlayerModel.Vital_Point = randomized_health
+
+    local random_frequency = math.random(1, total_frequency)
+    local accumulated_frequency = 0
+
+    for _, config in ipairs(HealthRandomizer.custom_configs) do
+        if config.enabled then
+            if HealthRandomizer.custom_equal_frequency then
+                accumulated_frequency = accumulated_frequency + 1
+            else
+                accumulated_frequency = accumulated_frequency + config.frequency
+            end
+
+            if random_frequency <= accumulated_frequency then
+                PlayerModel.Vital_Point = math.random(config.lower_bound, config.upper_bound)
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 function PlayerParam:randomize_player_drive(PlayerIndex)
     if not self.controller[PlayerIndex].drive_randomizer.enabled then
-        return
+        return false
     end
 
     local PlayerModel = self.model[PlayerIndex]
@@ -494,80 +436,49 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
 
     ensure_drive_randomizer_defaults(DriveRandomizer)
 
-    if DriveRandomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM then
-        local total_frequency = 0
-        for _, config in ipairs(DriveRandomizer.custom_configs) do
-            if config.enabled then
-                if DriveRandomizer.custom_equal_frequency then
-                    total_frequency = total_frequency + 1
-                else
-                    total_frequency = total_frequency + config.frequency
-                end
+    local total_frequency = 0
+    for _, config in ipairs(DriveRandomizer.custom_configs) do
+        if config.enabled then
+            if DriveRandomizer.custom_equal_frequency then
+                total_frequency = total_frequency + 1
+            else
+                total_frequency = total_frequency + config.frequency
             end
         end
+    end
 
-        if total_frequency <= 0 then
-            return
-        end
+    if total_frequency <= 0 then
+        return false
+    end
 
-        local random_frequency = math.random(1, total_frequency)
-        local accumulated_frequency = 0
-        local randomized_stocks = 0
+    local random_frequency = math.random(1, total_frequency)
+    local accumulated_frequency = 0
+    local randomized_stocks = 0
 
-        for _, config in ipairs(DriveRandomizer.custom_configs) do
-            if config.enabled then
-                if DriveRandomizer.custom_equal_frequency then
-                    accumulated_frequency = accumulated_frequency + 1
-                else
-                    accumulated_frequency = accumulated_frequency + config.frequency
-                end
+    for _, config in ipairs(DriveRandomizer.custom_configs) do
+        if config.enabled then
+            if DriveRandomizer.custom_equal_frequency then
+                accumulated_frequency = accumulated_frequency + 1
+            else
+                accumulated_frequency = accumulated_frequency + config.frequency
+            end
 
-                if random_frequency <= accumulated_frequency then
-                    randomized_stocks = config.value
-                    break
-                end
+            if random_frequency <= accumulated_frequency then
+                randomized_stocks = config.value
+                break
             end
         end
-
-        if PlayerView.drive_type then
-            PlayerModel.DG_Type = 1
-            PlayerModel.Is_DG_Point_Lock = PlayerView.original_drive_point_lock or false
-            apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
-        else
-            PlayerModel.DG_Type = 3
-            PlayerModel.Is_DG_Point_Lock = true
-            apply_randomized_drive_value(PlayerModel, randomized_stocks * 10000, true)
-        end
-        return
     end
 
-    -- randomize drive logic
-    if PlayerView.drive_type then
-        -- stock type
-        local lower_bound = -6
-        local upper_bound = 6
-        if DriveRandomizer.bounds_enabled then
-            lower_bound = DriveRandomizer.lower_bound_stock
-            upper_bound = DriveRandomizer.upper_bound_stock
-        end
-        local randomized_stocks = math.random(lower_bound, upper_bound)
-        apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
-    else
-        -- point type
-        local lower_bound = -60000
-        local upper_bound = 60000
-        if DriveRandomizer.bounds_enabled then
-            lower_bound = DriveRandomizer.lower_bound_points
-            upper_bound = DriveRandomizer.upper_bound_points
-        end
-        local randomized_points = math.random(lower_bound, upper_bound)
-        apply_randomized_drive_value(PlayerModel, randomized_points, true)
-    end
+    PlayerModel.DG_Type = 1
+    PlayerModel.Is_DG_Point_Lock = PlayerView.original_drive_point_lock or false
+    apply_randomized_drive_value(PlayerModel, randomized_stocks, false)
+    return true
 end
 
 function PlayerParam:randomize_player_super(PlayerIndex)
     if not self.controller[PlayerIndex].super_randomizer.enabled then
-        return
+        return false
     end
 
     local PlayerModel = self.model[PlayerIndex]
@@ -598,6 +509,8 @@ function PlayerParam:randomize_player_super(PlayerIndex)
         PlayerModel.SA_Point = randomized_points
         PlayerModel.SA_Stock = math.floor((PlayerModel.SA_Point + 5000) / 10000)
     end
+
+    return true
 end
 
 function PlayerParam:draw_health_ui(PlayerIndex)
@@ -630,121 +543,85 @@ function PlayerParam:draw_health_ui(PlayerIndex)
     if PlayerController.health_randomizer.enabled then
         ensure_health_randomizer_defaults(PlayerController.health_randomizer)
 
-        _, PlayerController.health_randomizer.mode =
-            imgui.combo(
-            PlayerLabel .. " Health Randomization Mode",
-            PlayerController.health_randomizer.mode,
-            HEALTH_RANDOMIZER_MODE_NAMES
+        imgui.separator()
+        imgui.text(PlayerLabel .. " Custom Health Configurations")
+
+        _, PlayerController.health_randomizer.custom_equal_frequency =
+            imgui.checkbox(
+            PlayerLabel .. " Use Equal Frequency for Enabled Health Configurations",
+            PlayerController.health_randomizer.custom_equal_frequency
         )
 
-        if PlayerController.health_randomizer.mode == HEALTH_RANDOMIZER_MODE_RANGE then
-            _, PlayerController.health_randomizer.bounds_enabled =
-                imgui.checkbox(
-                "Enable Bounds for " .. PlayerLabel .. " Health Randomization",
-                PlayerController.health_randomizer.bounds_enabled
-            )
-
-            if PlayerController.health_randomizer.bounds_enabled then
-                -- show the bounds sliders
-                _, PlayerController.health_randomizer.lower_bound =
-                    imgui.drag_int(
-                    PlayerLabel .. " Health Randomization Lower Bound",
-                    PlayerController.health_randomizer.lower_bound,
-                    0.3,
-                    0,
-                    PlayerController.health_randomizer.upper_bound
-                )
-                _, PlayerController.health_randomizer.upper_bound =
-                    imgui.drag_int(
-                    PlayerLabel .. " Health Randomization Upper Bound",
-                    PlayerController.health_randomizer.upper_bound,
-                    0.3,
-                    PlayerController.health_randomizer.lower_bound,
-                    100
-                )
-            end
-        elseif PlayerController.health_randomizer.mode == HEALTH_RANDOMIZER_MODE_CUSTOM then
+        local remove_index = nil
+        for index, config in ipairs(PlayerController.health_randomizer.custom_configs) do
             imgui.separator()
-            imgui.text(PlayerLabel .. " Custom Health Configurations")
+            imgui.text("Health Configuration " .. tostring(index))
+            begin_health_config_indent()
 
-            _, PlayerController.health_randomizer.custom_equal_frequency =
-                imgui.checkbox(
-                PlayerLabel .. " Use Equal Frequency for Enabled Health Configurations",
-                PlayerController.health_randomizer.custom_equal_frequency
+            _, config.enabled = imgui.checkbox(PlayerLabel .. " Enable Health Config " .. tostring(index), config.enabled)
+
+            if not config.enabled then
+                imgui.begin_disabled()
+            end
+
+            _, config.lower_bound =
+                imgui.drag_int(
+                PlayerLabel .. " Config " .. tostring(index) .. " Health Lower Bound",
+                config.lower_bound,
+                0.3,
+                1,
+                config.upper_bound
             )
-
-            local remove_index = nil
-            for index, config in ipairs(PlayerController.health_randomizer.custom_configs) do
-                imgui.separator()
-                imgui.text("Health Configuration " .. tostring(index))
-                begin_health_config_indent()
-
-                _, config.enabled =
-                    imgui.checkbox(PlayerLabel .. " Enable Health Config " .. tostring(index), config.enabled)
-
-                if not config.enabled then
-                    imgui.begin_disabled()
-                end
-
-                _, config.lower_bound =
-                    imgui.drag_int(
-                    PlayerLabel .. " Config " .. tostring(index) .. " Health Lower Bound",
-                    config.lower_bound,
-                    0.3,
-                    1,
-                    config.upper_bound
-                )
-                _, config.upper_bound =
-                    imgui.drag_int(
-                    PlayerLabel .. " Config " .. tostring(index) .. " Health Upper Bound",
-                    config.upper_bound,
-                    0.3,
-                    config.lower_bound,
-                    100
-                )
-                if PlayerController.health_randomizer.custom_equal_frequency then
-                    imgui.begin_disabled()
-                end
-                _, config.frequency =
-                    imgui.slider_int(
-                    PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)",
-                    config.frequency,
-                    1,
-                    10
-                )
-                if PlayerController.health_randomizer.custom_equal_frequency then
-                    imgui.end_disabled()
-                end
-
-                if not config.enabled then
-                    imgui.end_disabled()
-                end
-
-                if
-                    #PlayerController.health_randomizer.custom_configs > 1 and
-                        imgui.button(PlayerLabel .. " Delete Health Config " .. tostring(index))
-                 then
-                    remove_index = index
-                end
-                end_health_config_indent()
+            _, config.upper_bound =
+                imgui.drag_int(
+                PlayerLabel .. " Config " .. tostring(index) .. " Health Upper Bound",
+                config.upper_bound,
+                0.3,
+                config.lower_bound,
+                100
+            )
+            if PlayerController.health_randomizer.custom_equal_frequency then
+                imgui.begin_disabled()
+            end
+            _, config.frequency =
+                imgui.slider_int(
+                PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)",
+                config.frequency,
+                1,
+                10
+            )
+            if PlayerController.health_randomizer.custom_equal_frequency then
+                imgui.end_disabled()
             end
 
-            if remove_index ~= nil then
-                table.remove(PlayerController.health_randomizer.custom_configs, remove_index)
+            if not config.enabled then
+                imgui.end_disabled()
             end
 
-            imgui.separator()
-            if imgui.button(PlayerLabel .. " Add Health Configuration") then
-                table.insert(
-                    PlayerController.health_randomizer.custom_configs,
-                    {
-                        enabled = true,
-                        lower_bound = 100,
-                        upper_bound = 100,
-                        frequency = 1
-                    }
-                )
+            if
+                #PlayerController.health_randomizer.custom_configs > 1 and
+                    imgui.button(PlayerLabel .. " Delete Health Config " .. tostring(index))
+             then
+                remove_index = index
             end
+            end_health_config_indent()
+        end
+
+        if remove_index ~= nil then
+            table.remove(PlayerController.health_randomizer.custom_configs, remove_index)
+        end
+
+        imgui.separator()
+        if imgui.button(PlayerLabel .. " Add Health Configuration") then
+            table.insert(
+                PlayerController.health_randomizer.custom_configs,
+                {
+                    enabled = true,
+                    lower_bound = 100,
+                    upper_bound = 100,
+                    frequency = 1
+                }
+            )
         end
     end
 end
@@ -762,33 +639,8 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
         imgui.begin_disabled()
     end
 
-    -- drive sliders based on type
-    if PlayerView.drive_type then
-        -- stock type
-        PlayerView.drive_stocks_changed, PlayerView.drive_stocks =
-            imgui.slider_int(PlayerLabel .. " Drive Stocks", PlayerModel.DG_Stock, 0, 6)
-    else
-        -- custom type
-        if PlayerController.drive_points_type then
-            -- absolute type
-            PlayerView.drive_points_changed, PlayerView.drive_points =
-                imgui.drag_int(PlayerLabel .. " Drive Points", PlayerModel.DG_Point, 1, 0, 60000)
-        else
-            -- percentage type
-            local points_increments = 0
-            local current_points = PlayerModel.DG_Point / 10000
-            PlayerView.drive_points_changed, points_increments =
-                imgui.slider_float(
-                PlayerLabel .. " Drive Points (stock increments of 10%)",
-                current_points,
-                0,
-                6,
-                "%.1f"
-            )
-            -- convert to points
-            PlayerView.drive_points = math.floor(points_increments * 10000)
-        end
-    end
+    PlayerView.drive_stocks_changed, PlayerView.drive_stocks =
+        imgui.slider_int(PlayerLabel .. " Drive Stocks", PlayerModel.DG_Stock, 0, 6)
 
     -- burnout toggle
     PlayerView.burnout_changed, PlayerView.burnout =
@@ -801,21 +653,6 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
         imgui.end_disabled()
     end
 
-    -- stock vs points checkbox
-    local type_value = PlayerModel.DG_Type == 1
-    PlayerView.drive_type_changed, PlayerView.drive_type =
-        imgui.checkbox("Toggle " .. PlayerLabel .. " Drive Type (Stock / Points)", type_value)
-
-    -- on points, show percentage vs absolute toggle
-    if not PlayerView.drive_type then
-        imgui.same_line()
-        _, PlayerController.drive_points_type =
-            imgui.checkbox(
-            "Toggle " .. PlayerLabel .. " Drive Points Type (Absolute / Percentage)",
-            PlayerController.drive_points_type
-        )
-    end
-
     -- randomizer checkbox
     _, PlayerController.drive_randomizer.enabled =
         imgui.checkbox("Toggle " .. PlayerLabel .. " Drive Randomization", PlayerController.drive_randomizer.enabled)
@@ -823,169 +660,65 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
     if PlayerController.drive_randomizer.enabled then
         ensure_drive_randomizer_defaults(PlayerController.drive_randomizer)
 
-        local drive_randomizer_mode_index =
-            PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM and 2 or 1
-        _, drive_randomizer_mode_index =
-            imgui.combo(
-            PlayerLabel .. " Drive Randomization Mode",
-            drive_randomizer_mode_index,
-            DRIVE_RANDOMIZER_MODE_NAMES
+        imgui.separator()
+        imgui.text(PlayerLabel .. " Custom Drive Configurations")
+
+        _, PlayerController.drive_randomizer.custom_equal_frequency =
+            imgui.checkbox(
+            PlayerLabel .. " Use Equal Frequency for Enabled Drive Configurations",
+            PlayerController.drive_randomizer.custom_equal_frequency
         )
-        PlayerController.drive_randomizer.mode =
-            drive_randomizer_mode_index == 2 and DRIVE_RANDOMIZER_MODE_CUSTOM or DRIVE_RANDOMIZER_MODE_RANGE
 
-        if PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_RANGE then
-            _, PlayerController.drive_randomizer.bounds_enabled =
-                imgui.checkbox(
-                "Enable Bounds for " .. PlayerLabel .. " Drive Randomization",
-                PlayerController.drive_randomizer.bounds_enabled
-            )
-
-            if PlayerController.drive_randomizer.bounds_enabled then
-                -- show the bounds sliders based on type
-
-                if PlayerView.drive_type then
-                    -- stock type
-                    _, PlayerController.drive_randomizer.lower_bound_stock =
-                        imgui.drag_int(
-                        PlayerLabel .. " Drive Stock Randomization Lower Bound",
-                        PlayerController.drive_randomizer.lower_bound_stock,
-                        0.3,
-                        -6,
-                        PlayerController.drive_randomizer.upper_bound_stock
-                    )
-                    _, PlayerController.drive_randomizer.upper_bound_stock =
-                        imgui.drag_int(
-                        PlayerLabel .. " Drive Stock Randomization Upper Bound",
-                        PlayerController.drive_randomizer.upper_bound_stock,
-                        0.3,
-                        PlayerController.drive_randomizer.lower_bound_stock,
-                        6
-                    )
-                else
-                    -- point type
-                    if PlayerController.drive_points_type then
-                        -- absolute type
-                        _, PlayerController.drive_randomizer.lower_bound_points =
-                            imgui.drag_int(
-                            PlayerLabel .. " Drive Points Randomization Lower Bound",
-                            PlayerController.drive_randomizer.lower_bound_points,
-                            1,
-                            -60000,
-                            PlayerController.drive_randomizer.upper_bound_points
-                        )
-                        _, PlayerController.drive_randomizer.upper_bound_points =
-                            imgui.drag_int(
-                            PlayerLabel .. " Drive Points Randomization Upper Bound",
-                            PlayerController.drive_randomizer.upper_bound_points,
-                            1,
-                            PlayerController.drive_randomizer.lower_bound_points,
-                            60000
-                        )
-                    else
-                        -- percentage type
-                        local points_increments_lb = 0
-                        local current_points_lb = PlayerController.drive_randomizer.lower_bound_points / 10000
-
-                        local points_increments_ub = 0
-                        local current_points_ub = PlayerController.drive_randomizer.upper_bound_points / 10000
-
-                        _, points_increments_lb =
-                            imgui.drag_float(
-                            PlayerLabel .. " Drive Points Randomization Lower Bound (stock increments of 10%)",
-                            current_points_lb,
-                            0.1,
-                            -6,
-                            current_points_ub,
-                            "%.1f"
-                        )
-                        PlayerController.drive_randomizer.lower_bound_points = math.floor(points_increments_lb * 10000)
-
-                        _, points_increments_ub =
-                            imgui.drag_float(
-                            PlayerLabel .. " Drive Points Randomization Upper Bound (stock increments of 10%)",
-                            current_points_ub,
-                            0.1,
-                            points_increments_lb,
-                            6,
-                            "%.1f"
-                        )
-                        PlayerController.drive_randomizer.upper_bound_points = math.floor(points_increments_ub * 10000)
-                    end
-                end
-            end
-        elseif PlayerController.drive_randomizer.mode == DRIVE_RANDOMIZER_MODE_CUSTOM then
+        local remove_index = nil
+        for index, config in ipairs(PlayerController.drive_randomizer.custom_configs) do
             imgui.separator()
-            imgui.text(PlayerLabel .. " Custom Drive Configurations")
+            imgui.text("Drive Configuration " .. tostring(index))
+            begin_drive_config_indent()
 
-            _, PlayerController.drive_randomizer.custom_equal_frequency =
-                imgui.checkbox(
-                PlayerLabel .. " Use Equal Frequency for Enabled Drive Configurations",
-                PlayerController.drive_randomizer.custom_equal_frequency
+            _, config.enabled = imgui.checkbox(PlayerLabel .. " Enable Config " .. tostring(index), config.enabled)
+
+            if not config.enabled then
+                imgui.begin_disabled()
+            end
+            _, config.value =
+                imgui.slider_int(PlayerLabel .. " Config " .. tostring(index) .. " Drive Value (-6 to 6)", config.value, -6, 6)
+
+            if PlayerController.drive_randomizer.custom_equal_frequency then
+                imgui.begin_disabled()
+            end
+            _, config.frequency =
+                imgui.slider_int(PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)", config.frequency, 1, 10)
+            if PlayerController.drive_randomizer.custom_equal_frequency then
+                imgui.end_disabled()
+            end
+
+            if not config.enabled then
+                imgui.end_disabled()
+            end
+
+            if
+                #PlayerController.drive_randomizer.custom_configs > 1 and
+                    imgui.button(PlayerLabel .. " Delete Config " .. tostring(index))
+             then
+                remove_index = index
+            end
+            end_drive_config_indent()
+        end
+
+        if remove_index ~= nil then
+            table.remove(PlayerController.drive_randomizer.custom_configs, remove_index)
+        end
+
+        imgui.separator()
+        if imgui.button(PlayerLabel .. " Add Drive Configuration") then
+            table.insert(
+                PlayerController.drive_randomizer.custom_configs,
+                {
+                    enabled = true,
+                    value = 0,
+                    frequency = 1
+                }
             )
-
-            local remove_index = nil
-            for index, config in ipairs(PlayerController.drive_randomizer.custom_configs) do
-                imgui.separator()
-                imgui.text("Drive Configuration " .. tostring(index))
-                begin_drive_config_indent()
-
-                _, config.enabled =
-                    imgui.checkbox(PlayerLabel .. " Enable Config " .. tostring(index), config.enabled)
-
-                if not config.enabled then
-                    imgui.begin_disabled()
-                end
-                _, config.value =
-                    imgui.slider_int(
-                    PlayerLabel .. " Config " .. tostring(index) .. " Drive Value (-6 to 6)",
-                    config.value,
-                    -6,
-                    6
-                )
-
-                if PlayerController.drive_randomizer.custom_equal_frequency then
-                    imgui.begin_disabled()
-                end
-                _, config.frequency =
-                    imgui.slider_int(
-                    PlayerLabel .. " Config " .. tostring(index) .. " Frequency (1 to 10)",
-                    config.frequency,
-                    1,
-                    10
-                )
-                if PlayerController.drive_randomizer.custom_equal_frequency then
-                    imgui.end_disabled()
-                end
-
-                if not config.enabled then
-                    imgui.end_disabled()
-                end
-
-                if
-                    #PlayerController.drive_randomizer.custom_configs > 1 and
-                        imgui.button(PlayerLabel .. " Delete Config " .. tostring(index))
-                 then
-                    remove_index = index
-                end
-                end_drive_config_indent()
-            end
-
-            if remove_index ~= nil then
-                table.remove(PlayerController.drive_randomizer.custom_configs, remove_index)
-            end
-
-            imgui.separator()
-            if imgui.button(PlayerLabel .. " Add Drive Configuration") then
-                table.insert(
-                    PlayerController.drive_randomizer.custom_configs,
-                    {
-                        enabled = true,
-                        value = 0,
-                        frequency = 1
-                    }
-                )
-            end
         end
     end
 end
@@ -1193,12 +926,16 @@ end
 
 function PlayerParam:randomize()
     -- randomization logic for player parameters
-    self:randomize_player_health("p1")
-    self:randomize_player_health("p2")
-    self:randomize_player_drive("p1")
-    self:randomize_player_drive("p2")
-    self:randomize_player_super("p1")
-    self:randomize_player_super("p2")
+    local need_apply = false
+
+    need_apply = self:randomize_player_health("p1") or need_apply
+    need_apply = self:randomize_player_health("p2") or need_apply
+    need_apply = self:randomize_player_drive("p1") or need_apply
+    need_apply = self:randomize_player_drive("p2") or need_apply
+    need_apply = self:randomize_player_super("p1") or need_apply
+    need_apply = self:randomize_player_super("p2") or need_apply
+
+    return need_apply
 end
 
 --[[
@@ -1402,8 +1139,12 @@ function UniqueGaugeParam:randomize()
                             -- set to disabled
                             self.model[timerData.id] = 0
                         else
-                            -- enable it
-                            self.model[timerData.id] = 1
+                            if timerData.install == true then
+                                -- enable it
+                                self.model[timerData.id] = 1
+                            else
+                                self.model[timerData.id] = math.random(0, 1)
+                            end
 
                             -- if it's an install timer, set the start value
                             if timerData.install == true then
@@ -1660,12 +1401,7 @@ local PositionalParam = {
     controller = {}
 }
 
-local POSITION_ADJUSTMENT_MODE_STANDARD = 1
 local POSITION_ADJUSTMENT_MODE_CUSTOM = 2
-local POSITION_ADJUSTMENT_MODE_NAMES = {
-    "Standard Position Controls",
-    "Custom Position Configs"
-}
 
 local CUSTOM_POSITION_SIDE_RANDOM = 1
 local CUSTOM_POSITION_SIDE_PLAYER_LEFT = 2
@@ -1765,15 +1501,7 @@ end
 
 function PositionalParam:ensure_custom_position_defaults()
     self.controller.screen_position = self.controller.screen_position or {}
-    if type(self.controller.screen_position.adjustment_mode) ~= "number" then
-        self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_STANDARD
-    end
-    if
-        self.controller.screen_position.adjustment_mode < POSITION_ADJUSTMENT_MODE_STANDARD or
-            self.controller.screen_position.adjustment_mode > POSITION_ADJUSTMENT_MODE_CUSTOM
-     then
-        self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_STANDARD
-    end
+    self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_CUSTOM
 
     self.controller.custom_position = self.controller.custom_position or {}
     local custom_position = self.controller.custom_position
@@ -2041,7 +1769,7 @@ function PositionalParam:init(SelectMenuData)
     -- absolute screen position
 
     self.controller.screen_position.enabled = false
-    self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_STANDARD
+    self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_CUSTOM
 
     self.controller.screen_position.position = 0.0
     self.controller.screen_position.pivot_type_index = 1
@@ -2648,10 +2376,7 @@ function PositionalParam:randomize()
 
     self:ensure_custom_position_defaults()
 
-    if
-        self.controller.relative_distance.enabled and
-            (self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM)
-     then
+    if self.controller.relative_distance.enabled then
         local custom_position = self.controller.custom_position
         local total_frequency = 0
 
@@ -2690,120 +2415,6 @@ function PositionalParam:randomize()
 
         self.model.StartLocation = 3
         return true
-    end
-
-    -- randomize relative distance
-    if self.controller.randomizer.enabled_relative then
-        need_refresh = true
-
-        if self.controller.relative_distance.discrete_enabled then
-            -- discrete preset randomization
-
-            local lower_index = 1
-            local upper_index = #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1
-
-            if self.controller.randomizer.relative_bounds_enabled then
-                lower_index = self.controller.randomizer.relative_lower_bound_discrete_index
-                upper_index = self.controller.randomizer.relative_upper_bound_discrete_index
-            end
-
-            local random_index = math.random(lower_index, upper_index)
-            self.controller.relative_distance.discrete_relative_distance_preset_index = random_index
-
-            -- set the actual relative distance value
-            if random_index ~= #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1 then
-                self.controller.relative_distance.relative_distance =
-                    self.controller.relative_distance.min +
-                    module.data.PositionParametersData.preset_relative_distance_offsets.values[random_index]
-            else
-                self.controller.relative_distance.relative_distance = self.controller.relative_distance.max
-            end
-        else
-            -- precise randomization
-            local lower_bound = math.floor(self.controller.relative_distance.min)
-            local upper_bound = math.floor(self.controller.relative_distance.max)
-
-            if self.controller.randomizer.relative_bounds_enabled then
-                lower_bound = math.floor(self.controller.randomizer.relative_lower_bound)
-                upper_bound = math.floor(self.controller.randomizer.relative_upper_bound)
-            end
-
-            local random_value = math.random(lower_bound, upper_bound)
-            self.controller.relative_distance.relative_distance = random_value
-        end
-    end
-
-    if self.controller.randomizer.enabled_screen then
-        need_refresh = true
-
-        if self.controller.screen_position.discrete_screen_position then
-            -- discrete preset randomization
-            local lower_value = -6
-            local upper_value = 6
-
-            if self.controller.randomizer.screen_bounds_enabled then
-                lower_value = self.controller.randomizer.screen_lower_bound_discrete
-                upper_value = self.controller.randomizer.screen_upper_bound_discrete
-            end
-
-            local random_value = math.random(lower_value, upper_value)
-            self.controller.screen_position.discrete_screen_position_value = random_value
-
-            -- convert to absolute position
-            local min_pos = module.data.PositionParametersData.default_screen_position.min
-            local max_pos = module.data.PositionParametersData.default_screen_position.max
-            local fulcrum_position = min_pos + ((random_value + 6) / 12) * (max_pos - min_pos)
-            -- store controller.screen_position.position according to the currently selected reference type
-            -- 1 = absolute position, 2 = distance from left corner, 3 = distance from right corner
-            if self.controller.screen_position.precise_distance_reference_index == 1 then
-                -- absolute
-                self.controller.screen_position.position = fulcrum_position
-            elseif self.controller.screen_position.precise_distance_reference_index == 2 then
-                -- distance from left corner
-                self.controller.screen_position.position = fulcrum_position - min_pos
-            elseif self.controller.screen_position.precise_distance_reference_index == 3 then
-                -- distance from right corner
-                self.controller.screen_position.position = max_pos - fulcrum_position
-            end
-        else
-            -- precise randomization
-            local lower_bound = module.data.PositionParametersData.default_screen_position.min
-            local upper_bound = module.data.PositionParametersData.default_screen_position.max
-
-            if self.controller.randomizer.screen_bounds_enabled then
-                lower_bound = self.controller.randomizer.screen_lower_bound
-                upper_bound = self.controller.randomizer.screen_upper_bound
-            end
-
-            local random_value = math.random(math.floor(lower_bound), math.floor(upper_bound))
-            self.controller.screen_position.position = random_value
-
-            -- update the discrete slider value so the UI matches the computed fulcrum position
-            local fulcrum_position = 0.0
-            if self.controller.screen_position.precise_distance_reference_index == 1 then
-                -- absolute position
-                fulcrum_position = self.controller.screen_position.position
-            elseif self.controller.screen_position.precise_distance_reference_index == 2 then
-                -- distance from left corner
-                fulcrum_position =
-                    self.controller.screen_position.position +
-                    module.data.PositionParametersData.default_screen_position.min
-            elseif self.controller.screen_position.precise_distance_reference_index == 3 then
-                -- distance from right corner
-                fulcrum_position =
-                    module.data.PositionParametersData.default_screen_position.max -
-                    self.controller.screen_position.position
-            end
-
-            self.controller.screen_position.discrete_screen_position_value =
-                math.floor(
-                ((fulcrum_position - module.data.PositionParametersData.default_screen_position.min) /
-                    (module.data.PositionParametersData.default_screen_position.max -
-                        module.data.PositionParametersData.default_screen_position.min)) *
-                    12 +
-                    0.5
-            ) - 6
-        end
     end
 
     return need_refresh
@@ -3117,353 +2728,9 @@ function PositionalParam:draw_ui()
 
     if self.controller.relative_distance.enabled then
         self:ensure_custom_position_defaults()
-        _, self.controller.screen_position.adjustment_mode =
-            imgui.combo(
-            "Start Position Adjustment Mode",
-            self.controller.screen_position.adjustment_mode,
-            POSITION_ADJUSTMENT_MODE_NAMES
-        )
-        imgui.separator()
-
-        if self.controller.screen_position.adjustment_mode == POSITION_ADJUSTMENT_MODE_CUSTOM then
-            self:draw_custom_position_ui()
-            return
-        end
-
-        self.controller.relative_distance.discrete_relative_distance_enabled_changed,
-            self.controller.relative_distance.discrete_enabled =
-            imgui.checkbox("Use Preset Relative Distances", self.controller.relative_distance.discrete_enabled)
-
-        -- randomizer
-        if self.controller.randomizer.enabled_relative then
-            imgui.begin_disabled()
-        end
-
-        if self.controller.relative_distance.discrete_enabled then
-            -- combo picker for preset relative distances
-            self.view.relative_distance.discrete_relative_distance_preset_index_changed,
-                self.controller.relative_distance.discrete_relative_distance_preset_index =
-                imgui.combo(
-                "Relative Distance Presets",
-                self.controller.relative_distance.discrete_relative_distance_preset_index,
-                module.data.PositionParametersData.preset_relative_distance_offsets.names
-            )
-            imgui.text(
-                "Current Relative Distance: " ..
-                    string.format("%.2f", self.controller.relative_distance.relative_distance)
-            )
-        else
-            self.view.relative_distance.relative_distance_changed, self.controller.relative_distance.relative_distance =
-                imgui.drag_float(
-                "Relative Distance",
-                self.controller.relative_distance.relative_distance,
-                1.0,
-                self.controller.relative_distance.min,
-                self.controller.relative_distance.max
-            )
-            if imgui.is_item_active() then
-                module.ui_active = true
-            end
-        end
-
-        if self.controller.randomizer.enabled_relative then
-            imgui.end_disabled()
-        end
-
-        -- randomizer checkbox
-        _, self.controller.randomizer.enabled_relative =
-            imgui.checkbox("Toggle Relative Distance Randomization", self.controller.randomizer.enabled_relative)
-
-        if self.controller.randomizer.enabled_relative then
-            _, self.controller.randomizer.relative_bounds_enabled =
-                imgui.checkbox(
-                "Enable Bounds for Relative Distance Randomization",
-                self.controller.randomizer.relative_bounds_enabled
-            )
-            if self.controller.randomizer.relative_bounds_enabled then
-                -- depending on the discrete/precise mode, show the appropriate bound controls
-                if self.controller.relative_distance.discrete_enabled then
-                    -- discrete preset bounds
-                    self.view.randomizer.relative_discrete_bounds_changed = false
-
-                    -- for the discrete case, we only show a subset of the presets that fit within the current indices
-                    local lower_bound_options = {}
-                    local upper_bound_options = {}
-                    -- maps from local combo index -> global preset index
-                    local lower_map = {}
-                    local upper_map = {}
-
-                    local full_names = module.data.PositionParametersData.preset_relative_distance_offsets.names
-
-                    -- build option lists and mapping tables. We need to translate the controller's
-                    -- stored global indices into local indices that match the reduced option lists
-                    local local_lower_selected = 1
-                    local local_upper_selected =
-                        #module.data.PositionParametersData.preset_relative_distance_offsets.names
-                    for i, name in ipairs(full_names) do
-                        if i <= self.controller.randomizer.relative_upper_bound_discrete_index then
-                            table.insert(lower_bound_options, name)
-                            table.insert(lower_map, i)
-                            if i == self.controller.randomizer.relative_lower_bound_discrete_index then
-                                local_lower_selected = #lower_bound_options
-                            end
-                        end
-                        if i >= self.controller.randomizer.relative_lower_bound_discrete_index then
-                            table.insert(upper_bound_options, name)
-                            table.insert(upper_map, i)
-                            if i == self.controller.randomizer.relative_upper_bound_discrete_index then
-                                local_upper_selected = #upper_bound_options
-                            end
-                        end
-                    end
-
-                    -- call imgui with local indices
-                    local changed_lower, new_local_lower =
-                        imgui.combo(
-                        "Relative Distance Randomization Lower Bound Preset",
-                        local_lower_selected,
-                        lower_bound_options
-                    )
-                    if changed_lower then
-                        -- map back to the global preset index
-                        self.controller.randomizer.relative_lower_bound_discrete_index = lower_map[new_local_lower]
-                        self.view.randomizer.relative_discrete_bounds_changed = true
-                    end
-
-                    local changed_upper, new_local_upper =
-                        imgui.combo(
-                        "Relative Distance Randomization Upper Bound Preset",
-                        local_upper_selected,
-                        upper_bound_options
-                    )
-                    if changed_upper then
-                        self.controller.randomizer.relative_upper_bound_discrete_index = upper_map[new_local_upper]
-                        self.view.randomizer.relative_discrete_bounds_changed = true
-                    end
-                else
-                    -- precise bounds
-                    _, self.controller.randomizer.relative_lower_bound =
-                        imgui.drag_float(
-                        "Relative Distance Randomization Lower Bound",
-                        self.controller.randomizer.relative_lower_bound,
-                        1,
-                        self.controller.relative_distance.min,
-                        self.controller.randomizer.relative_upper_bound
-                    )
-                    _, self.controller.randomizer.relative_upper_bound =
-                        imgui.drag_float(
-                        "Relative Distance Randomization Upper Bound",
-                        self.controller.randomizer.relative_upper_bound,
-                        1,
-                        self.controller.randomizer.relative_lower_bound,
-                        self.controller.relative_distance.max
-                    )
-                end
-            end
-        end
-
-        imgui.separator()
-
-        -- checkbox for enabling starting position adjustment
-        self.view.screen_position.enabled_changed, self.controller.screen_position.enabled =
-            imgui.checkbox("Enable Starting Position Adjustment", self.controller.screen_position.enabled)
-        if self.controller.screen_position.enabled then
-            -- combo picker for type of starting position
-            self.view.screen_position.pivot_type_index_changed, self.controller.screen_position.pivot_type_index =
-                imgui.combo(
-                "Starting Position Pivot Type",
-                self.controller.screen_position.pivot_type_index,
-                {
-                    "Center Pivot Point",
-                    "Left Player Position Pivot (P1 Side)",
-                    "Right Player Position Pivot (P2 Side)"
-                }
-            )
-
-            imgui.spacing()
-
-            -- checkbox for discrete reference point adjustment toggle
-            self.view.screen_position.discrete_screen_position_changed,
-                self.controller.screen_position.discrete_screen_position =
-                imgui.checkbox(
-                "Use Discrete Starting Position Reference",
-                self.controller.screen_position.discrete_screen_position
-            )
-
-            if self.controller.screen_position.discrete_screen_position then
-                -- randomizer disabling
-                if self.controller.randomizer.enabled_screen then
-                    imgui.begin_disabled()
-                end
-
-                -- slider for discrete reference point
-                self.view.screen_position.discrete_screen_position_value_changed,
-                    self.controller.screen_position.discrete_screen_position_value =
-                    imgui.slider_int(
-                    "Starting Position Reference",
-                    self.controller.screen_position.discrete_screen_position_value,
-                    -6,
-                    6
-                )
-                if imgui.is_item_active() then
-                    module.ui_active = true
-                end
-
-                if self.controller.randomizer.enabled_screen then
-                    imgui.end_disabled()
-                end
-            else
-                -- combo picker for distance reference
-                self.view.screen_position.precise_distance_reference_index_changed,
-                    self.controller.screen_position.precise_distance_reference_index =
-                    imgui.combo(
-                    "Starting Position Distance Reference",
-                    self.controller.screen_position.precise_distance_reference_index,
-                    {
-                        "Absolute Position",
-                        "Distance from Left Corner",
-                        "Distance from Right Corner"
-                    }
-                )
-
-                -- slider for starting position
-
-                -- if the reference is not absolute position, adjust the min/max accordingly
-                local starting_position_min = 0.0
-                local starting_position_max = 0.0
-                if self.controller.screen_position.precise_distance_reference_index == 1 then
-                    -- absolute position
-                    starting_position_min = module.data.PositionParametersData.default_screen_position.min
-                    starting_position_max = module.data.PositionParametersData.default_screen_position.max
-                else
-                    -- distance from a corner
-                    starting_position_min = 0.0
-                    starting_position_max =
-                        module.data.PositionParametersData.default_screen_position.max -
-                        module.data.PositionParametersData.default_screen_position.min
-                end
-
-                -- randomizer disabling
-                if self.controller.randomizer.enabled_screen then
-                    imgui.begin_disabled()
-                end
-
-                self.view.screen_position.position_changed, self.controller.screen_position.position =
-                    imgui.drag_float(
-                    "Starting Position X",
-                    self.controller.screen_position.position,
-                    1.0,
-                    starting_position_min,
-                    starting_position_max
-                )
-                if imgui.is_item_active() then
-                    module.ui_active = true
-                end
-
-                if self.controller.randomizer.enabled_screen then
-                    imgui.end_disabled()
-                end
-            end
-
-            -- randomizer checkbox
-            _, self.controller.randomizer.enabled_screen =
-                imgui.checkbox("Toggle Starting Position Randomization", self.controller.randomizer.enabled_screen)
-            if self.controller.randomizer.enabled_screen then
-                _, self.controller.randomizer.screen_bounds_enabled =
-                    imgui.checkbox(
-                    "Enable Bounds for Starting Position Randomization",
-                    self.controller.randomizer.screen_bounds_enabled
-                )
-
-                if self.controller.randomizer.screen_bounds_enabled then
-                    -- depending on the discrete/precise mode, show the appropriate bound controls
-                    if self.controller.screen_position.discrete_screen_position then
-                        -- discrete values from -6 to 6
-
-                        self.view.randomizer.screen_discrete_bounds_changed = false
-
-                        local changed = false
-
-                        changed, self.controller.randomizer.screen_lower_bound_discrete =
-                            imgui.drag_int(
-                            "Starting Position Randomization Lower Bound Discrete",
-                            self.controller.randomizer.screen_lower_bound_discrete,
-                            0.3,
-                            -6,
-                            self.controller.randomizer.screen_upper_bound_discrete
-                        )
-                        if changed then
-                            self.view.randomizer.screen_discrete_bounds_changed = true
-                        end
-
-                        changed, self.controller.randomizer.screen_upper_bound_discrete =
-                            imgui.drag_int(
-                            "Starting Position Randomization Upper Bound Discrete",
-                            self.controller.randomizer.screen_upper_bound_discrete,
-                            0.3,
-                            self.controller.randomizer.screen_lower_bound_discrete,
-                            6
-                        )
-                        if changed then
-                            self.view.randomizer.screen_discrete_bounds_changed = true
-                        end
-                    else
-                        -- precise bounds
-                        -- starting position bounds
-                        local starting_position_min = 0.0
-                        local starting_position_max = 0.0
-                        if self.controller.screen_position.precise_distance_reference_index == 1 then
-                            -- absolute position
-                            starting_position_min = module.data.PositionParametersData.default_screen_position.min
-                            starting_position_max = module.data.PositionParametersData.default_screen_position.max
-                        else
-                            -- distance from a corner
-                            starting_position_min = 0.0
-                            starting_position_max =
-                                module.data.PositionParametersData.default_screen_position.max -
-                                module.data.PositionParametersData.default_screen_position.min
-                        end
-
-                        self.view.randomizer.screen_continuous_bounds_changed = false
-
-                        local changed = false
-
-                        changed, self.controller.randomizer.screen_lower_bound =
-                            imgui.drag_float(
-                            "Starting Position Randomization Lower Bound",
-                            self.controller.randomizer.screen_lower_bound,
-                            1,
-                            starting_position_min,
-                            self.controller.randomizer.screen_upper_bound
-                        )
-                        if changed then
-                            self.view.randomizer.screen_continuous_bounds_changed = true
-                        end
-
-                        changed, self.controller.randomizer.screen_upper_bound =
-                            imgui.drag_float(
-                            "Starting Position Randomization Upper Bound",
-                            self.controller.randomizer.screen_upper_bound,
-                            1,
-                            self.controller.randomizer.screen_lower_bound,
-                            starting_position_max
-                        )
-                        if changed then
-                            self.view.randomizer.screen_continuous_bounds_changed = true
-                        end
-                    end
-                end
-            end
-
-            if self.view.screen_position.show_position_warning then
-                imgui.text_colored(
-                    "Warning: The current combination of relative distance and starting position would cause the character to go offscreen!\nThe position will be adjust to respect the relative position and screen bounds.",
-                    0xFF00A9F9
-                )
-            end
-        end
+        self.controller.screen_position.adjustment_mode = POSITION_ADJUSTMENT_MODE_CUSTOM
+        self:draw_custom_position_ui()
     end
-
 end
 
 --[[
@@ -3530,7 +2797,7 @@ function module.on_frame()
 
     if module.request_randomizer then
         -- randomize parameters
-        PlayerParam:randomize()
+        need_apply = PlayerParam:randomize() or need_apply
         UniqueGaugeParam:randomize()
         need_refresh = PositionalParam:randomize() or need_refresh
 
