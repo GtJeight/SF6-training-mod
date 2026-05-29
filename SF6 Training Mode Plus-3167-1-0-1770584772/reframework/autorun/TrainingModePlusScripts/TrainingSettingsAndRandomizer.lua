@@ -517,7 +517,6 @@ function PlayerParam:draw_health_ui(PlayerIndex)
     local PlayerView = self.view[PlayerIndex]
     local PlayerController = self.controller[PlayerIndex]
     local PlayerModel = self.model[PlayerIndex]
-    local PlayerLabel = l10n.player_label(PlayerIndex)
 
     -- draw the health UI
 
@@ -527,7 +526,7 @@ function PlayerParam:draw_health_ui(PlayerIndex)
         imgui.begin_disabled()
     end
     PlayerView.health_changed, PlayerView.health =
-        imgui.slider_int(PlayerLabel .. " 体力百分比", PlayerModel.Vital_Point, 0, 100)
+        imgui.slider_int("体力百分比", PlayerModel.Vital_Point, 0, 100)
 
     imgui.separator()
 
@@ -538,27 +537,26 @@ function PlayerParam:draw_health_ui(PlayerIndex)
 
     -- randomizer checkbox
     _, PlayerController.health_randomizer.enabled =
-        imgui.checkbox("启用" .. PlayerLabel .. "体力随机化", PlayerController.health_randomizer.enabled)
+        imgui.checkbox("启用体力随机化", PlayerController.health_randomizer.enabled)
 
     if PlayerController.health_randomizer.enabled then
         ensure_health_randomizer_defaults(PlayerController.health_randomizer)
 
         imgui.separator()
-        imgui.text(PlayerLabel .. "自定义体力配置")
+        imgui.text("自定义体力配置")
 
         _, PlayerController.health_randomizer.custom_equal_frequency =
             imgui.checkbox(
-            PlayerLabel .. "启用的体力配置使用相同权重",
+            "统一触发频率",
             PlayerController.health_randomizer.custom_equal_frequency
         )
 
         local remove_index = nil
         for index, config in ipairs(PlayerController.health_randomizer.custom_configs) do
             imgui.separator()
-            imgui.text("体力配置 " .. tostring(index))
-            begin_health_config_indent()
 
-            _, config.enabled = imgui.checkbox(PlayerLabel .. "启用体力配置 " .. tostring(index), config.enabled)
+            _, config.enabled = imgui.checkbox("体力配置 " .. tostring(index), config.enabled)
+            begin_health_config_indent()
 
             if not config.enabled then
                 imgui.begin_disabled()
@@ -566,7 +564,7 @@ function PlayerParam:draw_health_ui(PlayerIndex)
 
             _, config.lower_bound =
                 imgui.drag_int(
-                PlayerLabel .. "配置 " .. tostring(index) .. " 体力下限",
+                "配置 " .. tostring(index) .. " 体力下限",
                 config.lower_bound,
                 0.3,
                 1,
@@ -574,7 +572,7 @@ function PlayerParam:draw_health_ui(PlayerIndex)
             )
             _, config.upper_bound =
                 imgui.drag_int(
-                PlayerLabel .. "配置 " .. tostring(index) .. " 体力上限",
+                "配置 " .. tostring(index) .. " 体力上限",
                 config.upper_bound,
                 0.3,
                 config.lower_bound,
@@ -585,7 +583,7 @@ function PlayerParam:draw_health_ui(PlayerIndex)
             end
             _, config.frequency =
                 imgui.slider_int(
-                PlayerLabel .. "配置 " .. tostring(index) .. " 权重（1到10）",
+                "配置 " .. tostring(index) .. " 权重（1到10）",
                 config.frequency,
                 1,
                 10
@@ -600,7 +598,7 @@ function PlayerParam:draw_health_ui(PlayerIndex)
 
             if
                 #PlayerController.health_randomizer.custom_configs > 1 and
-                    imgui.button(PlayerLabel .. "删除体力配置 " .. tostring(index))
+                    imgui.button("删除体力配置 " .. tostring(index))
              then
                 remove_index = index
             end
@@ -612,7 +610,7 @@ function PlayerParam:draw_health_ui(PlayerIndex)
         end
 
         imgui.separator()
-        if imgui.button(PlayerLabel .. "添加体力配置") then
+        if imgui.button("添加体力配置") then
             table.insert(
                 PlayerController.health_randomizer.custom_configs,
                 {
@@ -630,7 +628,6 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
     local PlayerView = self.view[PlayerIndex]
     local PlayerController = self.controller[PlayerIndex]
     local PlayerModel = self.model[PlayerIndex]
-    local PlayerLabel = l10n.player_label(PlayerIndex)
 
     -- drive slider(s)
 
@@ -640,11 +637,11 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
     end
 
     PlayerView.drive_stocks_changed, PlayerView.drive_stocks =
-        imgui.slider_int(PlayerLabel .. " 斗气库存", PlayerModel.DG_Stock, 0, 6)
+        imgui.slider_int("斗气库存", PlayerModel.DG_Stock, 0, 6)
 
     -- burnout toggle
     PlayerView.burnout_changed, PlayerView.burnout =
-        imgui.checkbox(PlayerLabel .. " 斗气枯竭", PlayerModel.Is_DG_Break)
+        imgui.checkbox("斗气枯竭", PlayerModel.Is_DG_Break)
 
     imgui.separator()
 
@@ -655,39 +652,38 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
 
     -- randomizer checkbox
     _, PlayerController.drive_randomizer.enabled =
-        imgui.checkbox("启用" .. PlayerLabel .. "斗气随机化", PlayerController.drive_randomizer.enabled)
+        imgui.checkbox("启用斗气随机化", PlayerController.drive_randomizer.enabled)
 
     if PlayerController.drive_randomizer.enabled then
         ensure_drive_randomizer_defaults(PlayerController.drive_randomizer)
 
         imgui.separator()
-        imgui.text(PlayerLabel .. "自定义斗气配置")
+        imgui.text("自定义斗气配置")
 
         _, PlayerController.drive_randomizer.custom_equal_frequency =
             imgui.checkbox(
-            PlayerLabel .. "启用的斗气配置使用相同权重",
+            "统一触发频率",
             PlayerController.drive_randomizer.custom_equal_frequency
         )
 
         local remove_index = nil
         for index, config in ipairs(PlayerController.drive_randomizer.custom_configs) do
             imgui.separator()
-            imgui.text("斗气配置 " .. tostring(index))
-            begin_drive_config_indent()
 
-            _, config.enabled = imgui.checkbox(PlayerLabel .. "启用配置 " .. tostring(index), config.enabled)
+            _, config.enabled = imgui.checkbox("斗气配置 " .. tostring(index), config.enabled)
+            begin_drive_config_indent()
 
             if not config.enabled then
                 imgui.begin_disabled()
             end
             _, config.value =
-                imgui.slider_int(PlayerLabel .. "配置 " .. tostring(index) .. " 斗气值（-6到6）", config.value, -6, 6)
+                imgui.slider_int("配置 " .. tostring(index) .. " 斗气值（-6到6）", config.value, -6, 6)
 
             if PlayerController.drive_randomizer.custom_equal_frequency then
                 imgui.begin_disabled()
             end
             _, config.frequency =
-                imgui.slider_int(PlayerLabel .. "配置 " .. tostring(index) .. " 权重（1到10）", config.frequency, 1, 10)
+                imgui.slider_int("配置 " .. tostring(index) .. " 权重（1到10）", config.frequency, 1, 10)
             if PlayerController.drive_randomizer.custom_equal_frequency then
                 imgui.end_disabled()
             end
@@ -698,7 +694,7 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
 
             if
                 #PlayerController.drive_randomizer.custom_configs > 1 and
-                    imgui.button(PlayerLabel .. "删除配置 " .. tostring(index))
+                    imgui.button("删除配置 " .. tostring(index))
              then
                 remove_index = index
             end
@@ -710,7 +706,7 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
         end
 
         imgui.separator()
-        if imgui.button(PlayerLabel .. "添加斗气配置") then
+        if imgui.button("添加斗气配置") then
             table.insert(
                 PlayerController.drive_randomizer.custom_configs,
                 {
@@ -727,7 +723,6 @@ function PlayerParam:draw_super_ui(PlayerIndex)
     local PlayerView = self.view[PlayerIndex]
     local PlayerController = self.controller[PlayerIndex]
     local PlayerModel = self.model[PlayerIndex]
-    local PlayerLabel = l10n.player_label(PlayerIndex)
 
     -- super slider(s)
     if PlayerController.super_randomizer.enabled then
@@ -739,20 +734,20 @@ function PlayerParam:draw_super_ui(PlayerIndex)
     if PlayerView.super_type then
         -- stock type
         PlayerView.super_stocks_changed, PlayerView.super_stocks =
-            imgui.slider_int(PlayerLabel .. " 超必杀库存", PlayerModel.SA_Stock, 0, 3)
+            imgui.slider_int("超必杀库存", PlayerModel.SA_Stock, 0, 3)
     else
         -- custom type
         if PlayerController.super_points_type then
             -- absolute type
             PlayerView.super_points_changed, PlayerView.super_points =
-                imgui.drag_int(PlayerLabel .. " 超必杀点数", PlayerModel.SA_Point, 1, 0, 30000)
+                imgui.drag_int("超必杀点数", PlayerModel.SA_Point, 1, 0, 30000)
         else
             -- percentage type
             local points_increments = 0
             local current_points = PlayerModel.SA_Point / 10000
             PlayerView.super_points_changed, points_increments =
                 imgui.slider_float(
-                PlayerLabel .. " 超必杀点数（按10%库存递增）",
+                "超必杀点数（按10%库存递增）",
                 current_points,
                 0,
                 3,
@@ -772,28 +767,28 @@ function PlayerParam:draw_super_ui(PlayerIndex)
     -- stock vs points checkbox
     local type_value = PlayerModel.SA_Type == 1
     PlayerView.super_type_changed, PlayerView.super_type =
-        imgui.checkbox("切换" .. PlayerLabel .. "超必杀类型（库存 / 点数）", type_value)
+        imgui.checkbox("切换超必杀类型（库存 / 点数）", type_value)
 
     -- on points, show percentage vs absolute toggle
     if not PlayerView.super_type then
         imgui.same_line()
         _, PlayerController.super_points_type =
             imgui.checkbox(
-            "切换" .. PlayerLabel .. "超必杀点数类型（绝对值 / 百分比）",
+            "切换超必杀点数类型（绝对值 / 百分比）",
             PlayerController.super_points_type
         )
     end
 
     -- randomizer checkbox
     _, PlayerController.super_randomizer.enabled =
-        imgui.checkbox("启用" .. PlayerLabel .. "超必杀槽随机化", PlayerController.super_randomizer.enabled)
+        imgui.checkbox("启用超必杀槽随机化", PlayerController.super_randomizer.enabled)
     -- if randomizer bounds enable checkbox
     if PlayerController.super_randomizer.enabled then
         -- show the bounds enable checkbox
 
         _, PlayerController.super_randomizer.bounds_enabled =
             imgui.checkbox(
-            "启用" .. PlayerLabel .. "超必杀槽随机化范围",
+            "统一设定超必杀槽随机化范围",
             PlayerController.super_randomizer.bounds_enabled
         )
 
@@ -804,7 +799,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                 -- stock type
                 _, PlayerController.super_randomizer.lower_bound_stock =
                     imgui.drag_int(
-                    PlayerLabel .. "超必杀库存随机下限",
+                    "超必杀库存随机下限",
                     PlayerController.super_randomizer.lower_bound_stock,
                     0.3,
                     0,
@@ -812,7 +807,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                 )
                 _, PlayerController.super_randomizer.upper_bound_stock =
                     imgui.drag_int(
-                    PlayerLabel .. "超必杀库存随机上限",
+                    "超必杀库存随机上限",
                     PlayerController.super_randomizer.upper_bound_stock,
                     0.3,
                     PlayerController.super_randomizer.lower_bound_stock,
@@ -824,7 +819,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                     -- absolute type
                     _, PlayerController.super_randomizer.lower_bound_points =
                         imgui.drag_int(
-                        PlayerLabel .. "超必杀点数随机下限",
+                        "超必杀点数随机下限",
                         PlayerController.super_randomizer.lower_bound_points,
                         1,
                         0,
@@ -832,7 +827,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                     )
                     _, PlayerController.super_randomizer.upper_bound_points =
                         imgui.drag_int(
-                        PlayerLabel .. "超必杀点数随机上限",
+                        "超必杀点数随机上限",
                         PlayerController.super_randomizer.upper_bound_points,
                         1,
                         PlayerController.super_randomizer.lower_bound_points,
@@ -848,7 +843,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
 
                     _, points_increments_lb =
                         imgui.drag_float(
-                        PlayerLabel .. "超必杀点数随机下限（按10%库存递增）",
+                        "超必杀点数随机下限（按10%库存递增）",
                         current_points_lb,
                         0.1,
                         0,
@@ -858,7 +853,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                     PlayerController.super_randomizer.lower_bound_points = math.floor(points_increments_lb * 10000)
                     _, points_increments_ub =
                         imgui.drag_float(
-                        PlayerLabel .. "超必杀点数随机上限（按10%库存递增）",
+                        "超必杀点数随机上限（按10%库存递增）",
                         current_points_ub,
                         0.1,
                         points_increments_lb,
@@ -2454,14 +2449,15 @@ function PositionalParam:draw_custom_position_ui()
     end
 
     _, custom_position.override_start_position_enabled =
-        imgui.checkbox("覆盖起始位置", custom_position.override_start_position_enabled)
+        imgui.checkbox("统一设定起始位置", custom_position.override_start_position_enabled)
+    begin_position_config_indent()
     if not custom_position.override_start_position_enabled then
         imgui.begin_disabled()
     end
     if custom_position.discrete_position_enabled then
         _, custom_position.override_discrete_start_position =
             imgui.slider_int(
-            "覆盖起始位置参考值",
+            "统一设定起始位置参考值",
             custom_position.override_discrete_start_position,
             -6,
             6
@@ -2470,7 +2466,7 @@ function PositionalParam:draw_custom_position_ui()
     else
         _, custom_position.override_start_position =
             imgui.drag_float(
-            "覆盖起始位置 X",
+            "统一设定起始位置 X",
             custom_position.override_start_position,
             1.0,
             screen_min,
@@ -2482,6 +2478,7 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_start_position_enabled then
         imgui.end_disabled()
     end
+    end_position_config_indent()
 
     imgui.separator()
 
@@ -2525,14 +2522,15 @@ function PositionalParam:draw_custom_position_ui()
     end
 
     _, custom_position.override_relative_distance_enabled =
-        imgui.checkbox("覆盖相对距离", custom_position.override_relative_distance_enabled)
+        imgui.checkbox("统一设定相对距离", custom_position.override_relative_distance_enabled)
+    begin_position_config_indent()
     if not custom_position.override_relative_distance_enabled then
         imgui.begin_disabled()
     end
     if custom_position.discrete_distance_enabled then
         _, custom_position.override_relative_distance_preset_index =
             imgui.combo(
-            "覆盖相对距离预设",
+            "统一设定相对距离预设",
             custom_position.override_relative_distance_preset_index,
             module.data.PositionParametersData.preset_relative_distance_offsets.names
         )
@@ -2542,11 +2540,11 @@ function PositionalParam:draw_custom_position_ui()
             self.controller.relative_distance.min,
             self.controller.relative_distance.max
         )
-        imgui.text("当前覆盖相对距离：" .. string.format("%.2f", custom_position.override_relative_distance))
+        imgui.text("当前统一设定相对距离：" .. string.format("%.2f", custom_position.override_relative_distance))
     else
         _, custom_position.override_relative_distance =
             imgui.drag_float(
-            "覆盖相对距离数值",
+            "统一设定相对距离数值",
             custom_position.override_relative_distance,
             1.0,
             self.controller.relative_distance.min,
@@ -2562,28 +2560,31 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_relative_distance_enabled then
         imgui.end_disabled()
     end
+    end_position_config_indent()
 
     local override_side_enabled_changed = false
     override_side_enabled_changed, custom_position.override_side_enabled =
-        imgui.checkbox("覆盖玩家站位侧", custom_position.override_side_enabled)
+        imgui.checkbox("统一设定玩家站位侧", custom_position.override_side_enabled)
     if override_side_enabled_changed then
         custom_position.override_resolved_side_index = nil
     end
+    begin_position_config_indent()
     if not custom_position.override_side_enabled then
         imgui.begin_disabled()
     end
     local override_side_changed = false
     override_side_changed, custom_position.override_side_index =
-        imgui.combo("覆盖玩家站位侧数值", custom_position.override_side_index, CUSTOM_POSITION_SIDE_NAMES)
+        imgui.combo("统一设定玩家站位侧数值", custom_position.override_side_index, CUSTOM_POSITION_SIDE_NAMES)
     if override_side_changed then
         custom_position.override_resolved_side_index = nil
     end
     if not custom_position.override_side_enabled then
         imgui.end_disabled()
     end
+    end_position_config_indent()
 
     _, custom_position.equal_frequency =
-        imgui.checkbox("启用的位置配置使用相同权重", custom_position.equal_frequency)
+        imgui.checkbox("统一触发频率", custom_position.equal_frequency)
 
     imgui.separator()
     imgui.text("自定义位置配置")
@@ -2591,10 +2592,9 @@ function PositionalParam:draw_custom_position_ui()
     local remove_index = nil
     for index, config in ipairs(custom_position.configs) do
         imgui.separator()
-        imgui.text("位置配置 " .. tostring(index))
-        begin_position_config_indent()
 
-        _, config.enabled = imgui.checkbox("启用位置配置 " .. tostring(index), config.enabled)
+        _, config.enabled = imgui.checkbox("位置配置 " .. tostring(index), config.enabled)
+        begin_position_config_indent()
 
         if not config.enabled then
             imgui.begin_disabled()
@@ -2693,7 +2693,6 @@ function PositionalParam:draw_custom_position_ui()
         if #custom_position.configs > 1 and imgui.button("删除位置配置 " .. tostring(index)) then
             remove_index = index
         end
-
         end_position_config_indent()
     end
 
