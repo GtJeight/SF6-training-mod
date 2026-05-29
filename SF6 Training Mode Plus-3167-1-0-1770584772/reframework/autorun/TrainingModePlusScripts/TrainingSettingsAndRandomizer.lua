@@ -1268,6 +1268,51 @@ function UniqueGaugeParam:init(ParameterSettingsData)
     end
 end
 
+function UniqueGaugeParam:ensure_controller_defaults()
+    for _, charData in pairs(module.data.UniqueCharData) do
+        self.controller[charData.name] = self.controller[charData.name] or {}
+
+        if charData.timers then
+            for _, timerData in pairs(charData.timers) do
+                self.controller[charData.name][timerData.id] = self.controller[charData.name][timerData.id] or {}
+                local controller = self.controller[charData.name][timerData.id]
+
+                if controller.randomizer_enabled == nil then
+                    controller.randomizer_enabled = false
+                end
+
+                if timerData.install == true then
+                    controller.installed_start_value = controller.installed_start_value or timerData.timerMaxValue
+                    if controller.disabled_prob_percentage == nil then
+                        controller.disabled_prob_percentage = 50
+                    end
+                    if controller.bounds_enabled == nil then
+                        controller.bounds_enabled = false
+                    end
+                    controller.lower_bound = controller.lower_bound or 0
+                    controller.upper_bound = controller.upper_bound or timerData.timerMaxValue
+                end
+            end
+        end
+
+        if charData.stocks then
+            for _, stockData in pairs(charData.stocks) do
+                self.controller[charData.name][stockData.id] = self.controller[charData.name][stockData.id] or {}
+                local controller = self.controller[charData.name][stockData.id]
+
+                if controller.randomizer_enabled == nil then
+                    controller.randomizer_enabled = false
+                end
+                if controller.bounds_enabled == nil then
+                    controller.bounds_enabled = false
+                end
+                controller.lower_bound = controller.lower_bound or stockData.minValue
+                controller.upper_bound = controller.upper_bound or stockData.maxValue
+            end
+        end
+    end
+end
+
 function UniqueGaugeParam:update()
     local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
     local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
@@ -3458,6 +3503,7 @@ function module.init()
     ensure_player_health_randomizer_defaults(PlayerParam.controller.p2)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p1)
     ensure_player_drive_randomizer_defaults(PlayerParam.controller.p2)
+    UniqueGaugeParam:ensure_controller_defaults()
     PositionalParam:ensure_custom_position_defaults()
 
     -- initialize refresh request flag
