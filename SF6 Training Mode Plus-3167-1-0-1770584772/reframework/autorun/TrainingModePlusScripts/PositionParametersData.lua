@@ -45,14 +45,14 @@ PositionalParametersData.preset_relative_distance_offsets = {
         330.0
     },
     names = {
-        "Point Blank",
-        "Close Range",
-        "Mid Range",
-        "Far Range",
-        "Throw Tech Distance",
-        "Roundstart Distance",
-        "Zoning Range",
-        "Max Range"
+        "贴身",
+        "近距离",
+        "中距离",
+        "远距离",
+        "拆投距离",
+        "开局距离",
+        "牵制距离",
+        "最大距离"
     }
 }
 

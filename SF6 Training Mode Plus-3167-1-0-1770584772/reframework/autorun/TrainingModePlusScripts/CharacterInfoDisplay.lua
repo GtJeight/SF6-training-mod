@@ -3,12 +3,12 @@ local re = re
 local sdk = sdk
 local reframework = reframework
 local imgui = imgui
+local l10n = require("TrainingModePlusScripts/Localization")
 
 local module = {}
 
-module.name = "Character Info Display"
-module.description =
-    "Module for displaying detailed live character information on screen, such as gauges, timers, and positions."
+module.name = "角色信息显示"
+module.description = "在屏幕上显示角色实时信息，例如槽量、计时器和位置。"
 
 module.data = {}
 module.ui = {}
@@ -53,7 +53,7 @@ function module.draw_ui()
     end
 
     -- nothing to draw for now
-    if imgui.collapsing_header("Character Info Display") then
+    if imgui.collapsing_header("角色信息显示") then
         -- display current health, drive and super for each character
 
         -- health
@@ -64,15 +64,15 @@ function module.draw_ui()
         local vital_max1 = p1.vital_max
         local vital_max2 = p2.vital_max
 
-        imgui.text("P1 Health: " .. tostring(vital_new1) .. " / " .. tostring(vital_max1))
-        imgui.text("P2 Health: " .. tostring(vital_new2) .. " / " .. tostring(vital_max2))
+        imgui.text("玩家1 体力：" .. tostring(vital_new1) .. " / " .. tostring(vital_max1))
+        imgui.text("玩家2 体力：" .. tostring(vital_new2) .. " / " .. tostring(vital_max2))
 
         if heal_new1 ~= vital_new1 then
-            imgui.text("P1 Gray Health: " .. tostring(heal_new1))
+            imgui.text("玩家1 可回复体力：" .. tostring(heal_new1))
         end
 
         if heal_new2 ~= vital_new2 then
-            imgui.text("P2 Gray Health: " .. tostring(heal_new2))
+            imgui.text("玩家2 可回复体力：" .. tostring(heal_new2))
         end
 
         imgui.separator()
@@ -81,8 +81,8 @@ function module.draw_ui()
         local drive_new1 = p1.focus_new
         local drive_new2 = p2.focus_new
 
-        imgui.text("P1 Drive: " .. tostring(drive_new1))
-        imgui.text("P2 Drive: " .. tostring(drive_new2))
+        imgui.text("玩家1 斗气：" .. tostring(drive_new1))
+        imgui.text("玩家2 斗气：" .. tostring(drive_new2))
 
         imgui.separator()
 
@@ -90,8 +90,8 @@ function module.draw_ui()
         local super_gauge1 = t1.mSuperGauge
         local super_gauge2 = t2.mSuperGauge
 
-        imgui.text("P1 Super Gauge: " .. tostring(super_gauge1))
-        imgui.text("P2 Super Gauge: " .. tostring(super_gauge2))
+        imgui.text("玩家1 超必杀槽：" .. tostring(super_gauge1))
+        imgui.text("玩家2 超必杀槽：" .. tostring(super_gauge2))
 
         imgui.separator()
 
@@ -106,16 +106,16 @@ function module.draw_ui()
 
                             if index == 1 then
                                 imgui.text(
-                                    char_data.name ..
+                                    l10n.character_name(char_data) ..
                                         " - " ..
-                                            timerData.name ..
+                                            l10n.resource_name(timerData) ..
                                                 ": " .. p1.style_timer .. " / " .. tostring(timerData.timerMaxValue)
                                 )
                             else
                                 imgui.text(
-                                    char_data.name ..
+                                    l10n.character_name(char_data) ..
                                         " - " ..
-                                            timerData.name ..
+                                            l10n.resource_name(timerData) ..
                                                 ": " .. p2.style_timer .. " / " .. tostring(timerData.timerMaxValue)
                                 )
                             end
@@ -134,9 +134,9 @@ function module.draw_ui()
         local pos2 = p2.pos.x
         local distance = p1.vs_distance
 
-        imgui.text("P1 Position: " .. string.format("%.2f", pos1:ToFloat()))
-        imgui.text("P2 Position: " .. string.format("%.2f", pos2:ToFloat()))
-        imgui.text("Distance Between P1 and P2: " .. string.format("%.2f", distance:ToFloat()))
+        imgui.text("玩家1 位置：" .. string.format("%.2f", pos1:ToFloat()))
+        imgui.text("玩家2 位置：" .. string.format("%.2f", pos2:ToFloat()))
+        imgui.text("玩家间距：" .. string.format("%.2f", distance:ToFloat()))
     end
 end
 

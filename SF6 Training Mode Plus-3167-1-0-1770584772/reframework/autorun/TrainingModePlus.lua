@@ -5,6 +5,7 @@ local re = re
 local sdk = sdk
 local reframework = reframework
 local imgui = imgui
+local l10n = require("TrainingModePlusScripts/Localization")
 
 -- getting the TrainingManager singleton also helps for determining SF6 initialization
 local TrainingManager = nil
@@ -107,7 +108,10 @@ re.on_frame(
                     -- skip
                 else
                     if type(module.on_frame) == "function" then
-                        module.on_frame()
+                        local result = module.on_frame()
+                        if type(result) == "table" and result.refresh_modules then
+                            mod_refresh_requested = true
+                        end
                     else
                         -- Only warn once to avoid spamming; print minimal info
                         -- This print will help identify which module lost its on_frame
@@ -122,21 +126,22 @@ re.on_frame(
             end
 
             if ShowScriptUI and reframework:is_drawing_ui() then
-                if imgui.begin_window("Training Mode Plus", true, 0) then
+                local font_pushed = l10n.push_font()
+                if imgui.begin_window("训练模式 Plus", true, 0) then
                     imgui.spacing()
 
-                    if imgui.button("Refresh Training Mode") then
+                    if imgui.button("刷新训练模式") then
                         refresh_requested = true
                     end
                     imgui.spacing()
 
-                    if imgui.button("Refresh Modules") then
+                    if imgui.button("刷新模块") then
                         mod_refresh_requested = true
                     end
 
                     imgui.same_line()
                     imgui.text_colored(
-                        "If you experience any bugs, try pressing the 'Refresh Modules' button to refresh the mod.",
+                        "如果遇到异常，点击“刷新模块”可重新载入模组。",
                         0xFF00A9F9
                     )
 
@@ -160,6 +165,7 @@ re.on_frame(
                 else
                     ShowScriptUI = false
                 end
+                l10n.pop_font(font_pushed)
             end
         else
             if TrainingStateChange then
@@ -185,12 +191,13 @@ re.on_frame(
 re.on_draw_ui(
     function()
         -- draw basic UI within the reframework console
-        if imgui.tree_node("Training Mode Plus") then
-            if imgui.button(ShowScriptUI and "Hide Script UI" or "Show Script UI") then
+        local font_pushed = l10n.push_font()
+        if imgui.tree_node("训练模式 Plus") then
+            if imgui.button(ShowScriptUI and "隐藏脚本界面" or "显示脚本界面") then
                 ShowScriptUI = not ShowScriptUI
             end
 
-            if imgui.tree_node("Modules loaded") then
+            if imgui.tree_node("已加载模块") then
                 for _, module in ipairs(tmplus_modules) do
                     imgui.text_colored(module.name, 0xFFAAFFFF)
                     imgui.same_line()
@@ -203,5 +210,6 @@ re.on_draw_ui(
             imgui.spacing()
             imgui.tree_pop()
         end
+        l10n.pop_font(font_pushed)
     end
 )

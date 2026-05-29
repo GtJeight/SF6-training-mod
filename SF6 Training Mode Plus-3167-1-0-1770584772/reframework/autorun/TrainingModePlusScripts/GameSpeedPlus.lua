@@ -6,11 +6,12 @@ local imgui = imgui
 
 local module = {}
 
-module.name = "Game Speed Plus"
-module.description = "Module for adjusting game speed beyond the normal settings provided by default"
+module.name = "游戏速度 Plus"
+module.description = "用于调整默认设置之外的游戏速度。"
 
 module.data = {}
 module.ui = {}
+module.hooks_initialized = false
 
 function module.init()
     -- get the important fields at init time
@@ -37,20 +38,23 @@ function module.init()
 
     -- Setup Hooks
 
-    sdk.hook(
-        sdk.find_type_definition("app.training.tf_OtherSetting.FuncData"):get_method(
-            "SetGameSpeed(app.training.GameSpeed)"
-        ),
-        function(args)
-            local ingame_new_speed = sdk.to_int64(args[3])
-            -- if the new speed is not 100%
-            if ingame_new_speed ~= 5 and module.ui.speed ~= 6 then
-                return sdk.PreHookResult.SKIP_ORIGINAL
-            else
-                module.ui.speed = ingame_new_speed + 1
+    if not module.hooks_initialized then
+        sdk.hook(
+            sdk.find_type_definition("app.training.tf_OtherSetting.FuncData"):get_method(
+                "SetGameSpeed(app.training.GameSpeed)"
+            ),
+            function(args)
+                local ingame_new_speed = sdk.to_int64(args[3])
+                -- if the new speed is not 100%
+                if ingame_new_speed ~= 5 and module.ui.speed ~= 6 then
+                    return sdk.PreHookResult.SKIP_ORIGINAL
+                else
+                    module.ui.speed = ingame_new_speed + 1
+                end
             end
-        end
-    )
+        )
+        module.hooks_initialized = true
+    end
 end
 
 function module.on_frame()
@@ -72,22 +76,22 @@ function module.on_frame()
 end
 
 function module.draw_ui()
-    if imgui.collapsing_header("Game Speed Plus") then
+    if imgui.collapsing_header("游戏速度 Plus") then
         module.ui.speed_changed_by_script, module.ui.speed =
             imgui.combo(
-            "Game Speed",
+            "游戏速度",
             module.ui.speed,
             {"50%", "60%", "70%", "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%"}
         )
 
         imgui.same_line()
 
-        if imgui.button("Reset to Standard") then
+        if imgui.button("重置为标准") then
             module.ui.speed_changed_by_script = true
             module.ui.speed = 6
         end
 
-        imgui.text("Note: You can use both the script menu and the ingame menu. Latest change takes precedence.")
+        imgui.text("注意：脚本菜单和游戏内菜单可同时使用，最后一次修改会生效。")
     end
 end
 
