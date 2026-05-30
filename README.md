@@ -1,5 +1,19 @@
 # Training Mode PlusPlus 使用说明
 
+本模组修改自模组 [Training Mode Plus](https://www.nexusmods.com/streetfighter6/mods/3167)
+
+依赖：
+- [_ScriptCore](https://www.nexusmods.com/streetfighter6/mods/3160)
+- [REFramework](https://www.nexusmods.com/streetfighter6/mods/73)
+
+如果嫌下载依赖麻烦，可以在Release页面下载整合版
+
+建议使用Fluffy Mod Manager装载模组，使用教程可在b站搜索
+
+游戏过程中若误将本模组或REFramework的窗口关闭，可按insert键呼出REFramework窗口，然后打开ScriptRunner一栏找到TrainingModePlus.lua这一项重新勾选即可
+
+以下内容由ai生成，可能包含错误内容
+
 这是一个《街头霸王6》训练模式辅助脚本模组，用于在训练场中快速设定或随机化体力、斗气、超必杀槽、角色专属资源、起始位置和游戏速度，方便复现更接近实战的复杂局面。
 
 ## 中文字体
@@ -151,6 +165,8 @@ Select + L3
 - 开局距离
 - 牵制距离
 - 最大距离
+
+启用 `使用预设相对距离` 时，下拉选项会直接显示预设名称和当前相对距离数值。
 
 自定义位置配置：
 

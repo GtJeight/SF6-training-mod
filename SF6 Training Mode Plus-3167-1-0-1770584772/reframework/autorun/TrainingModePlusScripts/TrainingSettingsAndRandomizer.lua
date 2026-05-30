@@ -545,11 +545,13 @@ function PlayerParam:draw_health_ui(PlayerIndex)
         imgui.separator()
         imgui.text("自定义体力配置")
 
+        begin_health_config_indent()
         _, PlayerController.health_randomizer.custom_equal_frequency =
             imgui.checkbox(
             "统一触发频率",
             PlayerController.health_randomizer.custom_equal_frequency
         )
+        end_health_config_indent()
 
         local remove_index = nil
         for index, config in ipairs(PlayerController.health_randomizer.custom_configs) do
@@ -660,11 +662,13 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
         imgui.separator()
         imgui.text("自定义斗气配置")
 
+        begin_drive_config_indent()
         _, PlayerController.drive_randomizer.custom_equal_frequency =
             imgui.checkbox(
             "统一触发频率",
             PlayerController.drive_randomizer.custom_equal_frequency
         )
+        end_drive_config_indent()
 
         local remove_index = nil
         for index, config in ipairs(PlayerController.drive_randomizer.custom_configs) do
@@ -1455,6 +1459,16 @@ local function relative_distance_preset_to_value(index, min_distance, max_distan
     end
 
     return max_distance
+end
+
+local function build_relative_distance_preset_names(min_distance, max_distance)
+    local names = {}
+    for index, name in ipairs(module.data.PositionParametersData.preset_relative_distance_offsets.names) do
+        local value = relative_distance_preset_to_value(index, min_distance, max_distance)
+        names[index] = name .. "（" .. string.format("%.2f", value) .. "）"
+    end
+
+    return names
 end
 
 local function relative_distance_to_preset_index(distance, min_distance, max_distance)
@@ -2426,6 +2440,10 @@ function PositionalParam:draw_custom_position_ui()
     local custom_position = self.controller.custom_position
     local screen_min = module.data.PositionParametersData.default_screen_position.min
     local screen_max = module.data.PositionParametersData.default_screen_position.max
+    local relative_distance_preset_names =
+        build_relative_distance_preset_names(self.controller.relative_distance.min, self.controller.relative_distance.max)
+
+    begin_position_config_indent()
 
     local discrete_position_changed = false
     discrete_position_changed, custom_position.discrete_position_enabled =
@@ -2449,8 +2467,8 @@ function PositionalParam:draw_custom_position_ui()
     end
 
     _, custom_position.override_start_position_enabled =
-        imgui.checkbox("统一设定起始位置", custom_position.override_start_position_enabled)
-    begin_position_config_indent()
+        imgui.checkbox("##统一设定起始位置", custom_position.override_start_position_enabled)
+    imgui.same_line()
     if not custom_position.override_start_position_enabled then
         imgui.begin_disabled()
     end
@@ -2478,7 +2496,6 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_start_position_enabled then
         imgui.end_disabled()
     end
-    end_position_config_indent()
 
     imgui.separator()
 
@@ -2522,8 +2539,8 @@ function PositionalParam:draw_custom_position_ui()
     end
 
     _, custom_position.override_relative_distance_enabled =
-        imgui.checkbox("统一设定相对距离", custom_position.override_relative_distance_enabled)
-    begin_position_config_indent()
+        imgui.checkbox("##统一设定相对距离", custom_position.override_relative_distance_enabled)
+    imgui.same_line()
     if not custom_position.override_relative_distance_enabled then
         imgui.begin_disabled()
     end
@@ -2532,7 +2549,7 @@ function PositionalParam:draw_custom_position_ui()
             imgui.combo(
             "统一设定相对距离预设",
             custom_position.override_relative_distance_preset_index,
-            module.data.PositionParametersData.preset_relative_distance_offsets.names
+            relative_distance_preset_names
         )
         custom_position.override_relative_distance =
             relative_distance_preset_to_value(
@@ -2540,7 +2557,6 @@ function PositionalParam:draw_custom_position_ui()
             self.controller.relative_distance.min,
             self.controller.relative_distance.max
         )
-        imgui.text("当前统一设定相对距离：" .. string.format("%.2f", custom_position.override_relative_distance))
     else
         _, custom_position.override_relative_distance =
             imgui.drag_float(
@@ -2560,15 +2576,14 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_relative_distance_enabled then
         imgui.end_disabled()
     end
-    end_position_config_indent()
 
     local override_side_enabled_changed = false
     override_side_enabled_changed, custom_position.override_side_enabled =
-        imgui.checkbox("统一设定玩家站位侧", custom_position.override_side_enabled)
+        imgui.checkbox("##统一设定玩家站位侧", custom_position.override_side_enabled)
+    imgui.same_line()
     if override_side_enabled_changed then
         custom_position.override_resolved_side_index = nil
     end
-    begin_position_config_indent()
     if not custom_position.override_side_enabled then
         imgui.begin_disabled()
     end
@@ -2581,10 +2596,11 @@ function PositionalParam:draw_custom_position_ui()
     if not custom_position.override_side_enabled then
         imgui.end_disabled()
     end
-    end_position_config_indent()
 
     _, custom_position.equal_frequency =
         imgui.checkbox("统一触发频率", custom_position.equal_frequency)
+
+    end_position_config_indent()
 
     imgui.separator()
     imgui.text("自定义位置配置")
@@ -2635,7 +2651,7 @@ function PositionalParam:draw_custom_position_ui()
                 imgui.combo(
                 "位置配置 " .. tostring(index) .. " 相对距离预设",
                 config.relative_distance_preset_index,
-                module.data.PositionParametersData.preset_relative_distance_offsets.names
+                relative_distance_preset_names
             )
             config.relative_distance =
                 relative_distance_preset_to_value(
@@ -2643,7 +2659,6 @@ function PositionalParam:draw_custom_position_ui()
                 self.controller.relative_distance.min,
                 self.controller.relative_distance.max
             )
-            imgui.text("当前相对距离：" .. string.format("%.2f", config.relative_distance))
         else
             _, config.relative_distance =
                 imgui.drag_float(
