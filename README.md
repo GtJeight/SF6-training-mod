@@ -6,7 +6,7 @@
 - [_ScriptCore](https://www.nexusmods.com/streetfighter6/mods/3160)
 - [REFramework](https://www.nexusmods.com/streetfighter6/mods/73)
 
-如果嫌下载依赖麻烦，可以在Release页面下载整合版
+如果嫌下载依赖麻烦，可以在[Release](https://github.com/GtJeight/SF6-training-mod/releases/tag/v1.0.0)页面下载整合版
 
 建议使用Fluffy Mod Manager装载模组，使用教程可在b站搜索
 
