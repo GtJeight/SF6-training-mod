@@ -734,7 +734,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
     if PlayerView.super_type then
         -- stock type
         PlayerView.super_stocks_changed, PlayerView.super_stocks =
-            imgui.slider_int("超必杀库存", PlayerModel.SA_Stock, 0, 3)
+            imgui.slider_int("超必杀整格数", PlayerModel.SA_Stock, 0, 3)
     else
         -- custom type
         if PlayerController.super_points_type then
@@ -747,7 +747,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
             local current_points = PlayerModel.SA_Point / 10000
             PlayerView.super_points_changed, points_increments =
                 imgui.slider_float(
-                "超必杀点数（按10%库存递增）",
+                "超必杀任意格数（按0.1格递增）",
                 current_points,
                 0,
                 3,
@@ -767,14 +767,14 @@ function PlayerParam:draw_super_ui(PlayerIndex)
     -- stock vs points checkbox
     local type_value = PlayerModel.SA_Type == 1
     PlayerView.super_type_changed, PlayerView.super_type =
-        imgui.checkbox("切换超必杀类型（库存 / 点数）", type_value)
+        imgui.checkbox("切换超必杀类型（整格 / 任意格数）", type_value)
 
     -- on points, show percentage vs absolute toggle
     if not PlayerView.super_type then
         imgui.same_line()
         _, PlayerController.super_points_type =
             imgui.checkbox(
-            "切换超必杀点数类型（绝对值 / 百分比）",
+            "切换任意格数输入方式（点数 / 小数格）",
             PlayerController.super_points_type
         )
     end
@@ -799,7 +799,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                 -- stock type
                 _, PlayerController.super_randomizer.lower_bound_stock =
                     imgui.drag_int(
-                    "超必杀库存随机下限",
+                    "超必杀整格随机下限",
                     PlayerController.super_randomizer.lower_bound_stock,
                     0.3,
                     0,
@@ -807,7 +807,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                 )
                 _, PlayerController.super_randomizer.upper_bound_stock =
                     imgui.drag_int(
-                    "超必杀库存随机上限",
+                    "超必杀整格随机上限",
                     PlayerController.super_randomizer.upper_bound_stock,
                     0.3,
                     PlayerController.super_randomizer.lower_bound_stock,
@@ -843,7 +843,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
 
                     _, points_increments_lb =
                         imgui.drag_float(
-                        "超必杀点数随机下限（按10%库存递增）",
+                        "超必杀任意格数随机下限（按0.1格递增）",
                         current_points_lb,
                         0.1,
                         0,
@@ -853,7 +853,7 @@ function PlayerParam:draw_super_ui(PlayerIndex)
                     PlayerController.super_randomizer.lower_bound_points = math.floor(points_increments_lb * 10000)
                     _, points_increments_ub =
                         imgui.drag_float(
-                        "超必杀点数随机上限（按10%库存递增）",
+                        "超必杀任意格数随机上限（按0.1格递增）",
                         current_points_ub,
                         0.1,
                         points_increments_lb,
